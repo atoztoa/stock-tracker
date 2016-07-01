@@ -13,8 +13,6 @@ import sys
 # ------- CONSTANTS --------- #
 KEYWORDS = json.load(open("scrip.json"))
 
-print KEYWORDS
-
 MISC_KEY = "--CHARGES--"
 
 COLUMNS = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Bought Qty', 'Sold Qty', 'Gross Rate', 'Gross Total', 'Brokerage', 'Net Rate', 'Service Tax', 'STT', 'Total', 'Trade Date']
@@ -44,7 +42,8 @@ def get_market_price(symbol):
 
     if symbol not in KEYWORDS:
         print "Scrip information not available!"
-        return (0.0, "")
+        
+        raise Exception("New Scrip! Add Symbol!")
 
     symbol = KEYWORDS[symbol]
 
