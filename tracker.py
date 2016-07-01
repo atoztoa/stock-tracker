@@ -11,21 +11,9 @@ from termcolor import colored
 import sys
 
 # ------- CONSTANTS --------- #
-KEYWORDS = {
-            "TATA ELXSI" : "NSE:TATAELXSI",
-            "TATA MOTORS(TELCO)" : "NSE:TATAMOTORS",
-            "TATA CONSULTANCY SE": "NSE:TCS",
-            "CIPLA": "NSE:CIPLA",
-            "TATA IRON & STEEL CO": "NSE:TATASTEEL",
-            "KAMDHENU ISPAT LTD" : "NSE:KAMDHENU",
-            "JAMNA AUTO INDUSTRIE" : "NSE:JAMNAAUTO",
-            "IDBI BANK LIMITED" : "NSE:IDBI",
-            "TATA METALIKS" : "NSE:TATAMETALI",
-            "KALYANI STEELS LTD": "NSE:KSL",
-            "TV TODAY NETWORK LTD": "NSE:TVTODAY",
-            "HINDALCO INDUSTRIES": "NSE:HINDALCO",
-            "MAWANA SUGARS LTD": "NSE:MAWANASUG",
-        }
+KEYWORDS = json.load(open("scrip.json"))
+
+print KEYWORDS
 
 MISC_KEY = "--CHARGES--"
 
