@@ -375,20 +375,6 @@ def generate_portfolio(transactions):
 
     percentage = report['balance'] / report['total'] * 100
 
-    """
-    tabular(portfolio)
-
-    print "=" * 52
-    print " | TOTAL INVESTMENT : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total'])), 'white') + " |"
-    print " | CURRENT VALUE    : " + colored("{0:29}".format("₹ {:,.2f}".format(report['current_value'])), 'yellow') + " |"
-    print " | ENTRY LOAD       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['entry_load'])), 'cyan') + " |"
-    print " | EXIT LOAD        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
-    print " | PROFIT/LOSS      : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['balance'], percentage)), "red" if report['balance'] < 0 else "green") + " |"
-    print " | CLEARED          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
-    print " | BACKLOG          : " + colored("{0:29}".format("₹ {:,.2f}".format(BACKLOG)), 'red') + " |"
-    print "=" * 52
-    """
-
     # ------------ Display results --------------
     # ------------ Save results to file --------------
     
@@ -404,15 +390,15 @@ def generate_portfolio(transactions):
 
         tabular(portfolio)
 
-        print "=" * 52
-        print " | TOTAL INVESTMENT : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total'])), 'white') + " |"
-        print " | CURRENT VALUE    : " + colored("{0:29}".format("₹ {:,.2f}".format(report['current_value'])), 'yellow') + " |"
-        print " | ENTRY LOAD       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['entry_load'])), 'cyan') + " |"
-        print " | EXIT LOAD        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
-        print " | PROFIT/LOSS      : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['balance'], percentage)), "red" if report['balance'] < 0 else "green") + " |"
-        print " | CLEARED          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
-        print " | BACKLOG          : " + colored("{0:29}".format("₹ {:,.2f}".format(BACKLOG)), 'red') + " |"
-        print "=" * 52
+        print "=" * 61
+        print " | A. TOTAL INVESTMENT       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total'])), 'white') + " |"
+        print " | B. CURRENT VALUE          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['current_value'])), 'yellow') + " |"
+        print " | C. ENTRY LOAD (ACTUAL)    : " + colored("{0:29}".format("₹ {:,.2f}".format(report['entry_load'])), 'cyan') + " |"
+        print " | D. EXIT LOAD (ESTIMATED)  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
+        print " | E. PROFIT/LOSS            : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['balance'], percentage)), "red" if report['balance'] < 0 else "green") + " |"
+        print " | F. CLEARED [LESS CHARGES] : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
+        print " | G. BACKLOG (ACTUAL)       : " + colored("{0:29}".format("₹ {:,.2f}".format(BACKLOG)), 'red') + " |"
+        print "=" * 61
 
         print
         print "+" * 80
