@@ -21,7 +21,7 @@ COLUMNS_NEW = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 
 BROKERAGE_RATE = 0.004
 EXIT_LOAD_RATE = 0.004
 
-BACKLOG = -20000.00
+PREVIOUS_BALANCE = -20000.00
 
 """ Custom class for printing to file
 """
@@ -364,7 +364,7 @@ def update_portfolio(trades, portfolio):
 
 """ Create and update the portfolio
 """
-def generate_portfolio(transactions):
+def generate_report(transactions):
     print "Generating portfolio..."
 
     portfolio = {}
@@ -372,8 +372,6 @@ def generate_portfolio(transactions):
     update_portfolio(trades, portfolio)
 
     report = process_portfolio(portfolio)
-
-    percentage = report['balance'] / report['total'] * 100
 
     # ------------ Display results --------------
     # ------------ Save results to file --------------
@@ -390,15 +388,16 @@ def generate_portfolio(transactions):
 
         tabular(portfolio)
 
-        print "=" * 61
-        print " | A. TOTAL INVESTMENT       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total'])), 'white') + " |"
-        print " | B. CURRENT VALUE          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['current_value'])), 'yellow') + " |"
-        print " | C. ENTRY LOAD (ACTUAL)    : " + colored("{0:29}".format("₹ {:,.2f}".format(report['entry_load'])), 'cyan') + " |"
-        print " | D. EXIT LOAD (ESTIMATED)  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
-        print " | E. PROFIT/LOSS            : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['balance'], percentage)), "red" if report['balance'] < 0 else "green") + " |"
-        print " | F. CLEARED [LESS CHARGES] : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
-        print " | G. BACKLOG (ACTUAL)       : " + colored("{0:29}".format("₹ {:,.2f}".format(BACKLOG)), 'red') + " |"
-        print "=" * 61
+        print "=" * 64
+        print " | A. TOTAL INVESTMENT          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total'])), 'white') + " |"
+        print " | B. CURRENT VALUE             : " + colored("{0:29}".format("₹ {:,.2f}".format(report['current_value'])), 'yellow') + " |"
+        print " | C. CHARGES (ACTUAL)          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges'])), 'cyan') + " |"
+        print " | D. EXIT LOAD (ESTIMATED)     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
+        print " | E. PROFIT/LOSS               : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
+        print " | F. CLEARED [LESS CHARGES]    : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
+        print " | G. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), 'red') + " |"
+        print " | H. BALANCE (F + G)           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
+        print "=" * 64
 
         print
         print "+" * 80
@@ -412,16 +411,17 @@ def generate_portfolio(transactions):
 def process_portfolio(portfolio):
     print "Processing portfolio..."
 
-    balance = 0
+    profit = 0
     total = 0
     current_value = 0
     cleared = 0
+    charges = 0
 
     # Final
     for key in dict(portfolio):
         # Misc
         if key == MISC_KEY:
-            balance -= portfolio[key]["Total Value"]
+            charges = portfolio[key]["Total Value"]
             portfolio[key]["Total Value"] = round(portfolio[key]["Total Value"], 2)
         else:
             market_rate = get_market_price(key)
@@ -439,22 +439,27 @@ def process_portfolio(portfolio):
                 portfolio[key]["ROI"] = 0
                 portfolio[key]["Average Rate"] = 0
 
-            balance += portfolio[key]["Profit/Loss"]
+            profit += portfolio[key]["Profit/Loss"]
             total += portfolio[key]["Total Value"]
             current_value += portfolio[key]["Current Value"]
             cleared += portfolio[key]["Cleared"]
 
-    entry_load = portfolio[MISC_KEY]["Total Value"] + (total * BROKERAGE_RATE)
     exit_load = current_value * EXIT_LOAD_RATE
-    balance -= exit_load
+    cleared -= charges
+    previous_balance = PREVIOUS_BALANCE
+    balance = previous_balance + cleared
+    profit_percentage = profit / total * 100
 
     return {
                 "total": total,
                 "current_value": current_value,
-                "entry_load": entry_load,
                 "exit_load": exit_load,
+                "profit": profit,
+                "profit_percentage": profit_percentage,
+                "cleared": cleared,
+                "previous_balance": previous_balance,
                 "balance": balance,
-                "cleared": cleared
+                "charges": charges
             }
 
 """ Display the portfolio in tabular form
@@ -573,4 +578,4 @@ if __name__ == '__main__':
     trades = crunch_trades(transactions)
 
     # Generate the porfolio
-    generate_portfolio(trades)
+    generate_report(trades)
