@@ -564,12 +564,33 @@ def print_table(data_table):
 """
 if __name__ == '__main__':
     transactions = []
+    processed_files = []
+
+    # Load existing transactions
+    try:
+        with open('trades.json') as f:
+            transactions = json.load(f)
+    except Exception as e:
+        print e
+
+    # Load processed file list
+    try:
+        with open('processed.json') as f:
+            processed_files = json.load(f)
+    except Exception as e:
+        print e
 
     # Parse HTML files
     for filename in glob.glob('*.htm'):
-        cn_entries = crunch_cn_entries(process_cn_entries(parse_cn_file(filename)))
+        if filename not in processed_files:
+            cn_entries = crunch_cn_entries(process_cn_entries(parse_cn_file(filename)))
+            transactions.extend(cn_entries)
 
-        transactions.extend(cn_entries)
+            processed_files.append(filename)
+   
+    # Store
+    json.dump(transactions, open('trades.json', 'w'));
+    json.dump(processed_files, open('processed.json', 'w'));
 
     # Standardize transactions
     transactions = crunch_transactions(transactions)
