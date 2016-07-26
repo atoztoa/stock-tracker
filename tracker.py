@@ -28,7 +28,7 @@ PREVIOUS_BALANCE = -20000.00
 class writer:
     def __init__(self, *writers) :
         self.writers = writers
-                        
+
     def write(self, text) :
         for w in self.writers :
             w.write(text)
@@ -42,7 +42,7 @@ def get_market_price(symbol):
 
     if symbol not in KEYWORDS:
         print "Scrip information not available!"
-        
+
         raise Exception("New Scrip! Add Symbol!")
 
     symbol = KEYWORDS[symbol]
@@ -51,8 +51,7 @@ def get_market_price(symbol):
         response = urllib2.urlopen(base_url + symbol)
         html = response.read()
     except Exception, msg:
-        print msg
-        return (0.0, "")
+        raise Exception("Error getting market price!")
 
     soup = BeautifulSoup(html)
 
@@ -66,8 +65,7 @@ def get_market_price(symbol):
 
         return (price, price_change)
     except Exception as e:
-        print "Can't get current rate for scrip: " + symbol
-        return (0.0, "")
+        raise Exception("Can't get current rate for scrip: " + symbol)
 
 """ Get transaction data from Contract Note file
 """
@@ -285,7 +283,7 @@ def crunch_transactions(entries):
                 del(entry['STT'])
             crunched_entries.append(entry)
 
-    crunched_entries = sorted(crunched_entries, key=lambda k: (k['Security'], k['Trade Date'], k['Type'], k['Trade Time']))
+    crunched_entries = sorted(crunched_entries, key=lambda k: (k['Security'], k['Trade Date'], k['Trade Time']))
 
     crunched_entries.append({"Type": "MISC", "Total": misc_total})
 
@@ -315,16 +313,57 @@ def crunch_trades(transactions):
                 "Total Quantity": 0,
                 "Total Value": 0,
                 "Rate": 0,
-                "Cleared": 0
+                "Cleared": 0,
+                "Short Quantity": 0,
+                "Short Value": 0,
+                "Short Rate": 0
             }
 
+        if "IDBI" in scrip:
+            print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+            print "--" + scrip + "--"
+            print trades[scrip]
+            print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
 
         # BUY
         if transaction['Type'] == 'BUY':
-            trades[scrip]['Total Quantity'] += quantity
-            trades[scrip]['Total Value'] += total
-            trades[scrip]['Rate'] = trades[scrip]['Total Value'] / trades[scrip]['Total Quantity']
+            if trades[scrip]['Short Quantity'] == 0:
+                trades[scrip]['Total Quantity'] += quantity
+                trades[scrip]['Total Value'] += total
+                trades[scrip]['Rate'] = trades[scrip]['Total Value'] / trades[scrip]['Total Quantity']
+                print "BUY NORMAL +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                print scrip
+                print trades[scrip]
+                print "------------------"
+            else:
+                # Cover short
+                if trades[scrip]['Short Quantity'] >= quantity:
+                    # Not enough to cover all
+                    trades[scrip]['Cleared'] += (quantity * trades[scrip]['Short Rate']) - total
+                    trades[scrip]['Short Quantity'] -= quantity
+                    trades[scrip]['Short Value'] = trades[scrip]['Short Quantity'] * trades[scrip]['Short Rate']
 
+                    print "BUY NOT ENOUGH +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                    print scrip
+                    print trades[scrip]
+                    print "------------------"
+                else:
+                    # Cover short first
+                    cover_quantity = trades[scrip]['Short Quantity']
+                    trades[scrip]['Cleared'] += (cover_quantity * trades[scrip]['Short Rate']) - (cover_quantity * total / quantity)
+                    trades[scrip]['Short Quantity'] = 0
+                    trades[scrip]['Short Value'] = 0
+
+                    # Add rest to stock
+                    buy_quantity = quantity - cover_quantity
+                    trades[scrip]['Total Quantity'] += buy_quantity
+                    trades[scrip]['Total Value'] += (buy_quantity * total / quantity)
+                    trades[scrip]['Rate'] = trades[scrip]['Total Value'] / trades[scrip]['Total Quantity']
+
+                    print "BUY COVERED +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                    print scrip
+                    print trades[scrip]
+                    print "------------------"
         else:
             # Have shares?
             if trades[scrip]['Total Quantity'] >= quantity:
@@ -335,12 +374,58 @@ def crunch_trades(transactions):
                 trades[scrip]['Total Quantity'] -= quantity
                 trades[scrip]['Total Value'] = trades[scrip]['Total Quantity'] * trades[scrip]['Rate']
 
-        # Prune
-        if trades[scrip]['Total Quantity'] == 0:
-            if trades[scrip]['Cleared'] == 0:
-                del(trades[scrip])
+                print "SELL NORMAL +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                print scrip
+                print trades[scrip]
+                print "------------------"
+            elif trades[scrip]['Total Quantity'] == 0:
+                print "SELL NOTHING IN STOCK +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                print scrip
+                print trades[scrip]
+                print "------------------"
+                trades[scrip]['Short Quantity'] += quantity
+                trades[scrip]['Short Value'] += total
+                trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
+                print "SELL NOTHING IN STOCK +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                print scrip
+                print trades[scrip]
+                print "------------------"
             else:
-                trades[scrip]['Rate'] = 0
+                # Partial short
+                cleared_quantity = trades[scrip]['Total Quantity']
+                trades[scrip]['Cleared'] += (cleared_quantity * total / quantity) - trades[scrip]['Total Value']
+                trades[scrip]['Total Quantity'] = 0
+                trades[scrip]['Total Value'] = 0
+
+                trades[scrip]['Short Quantity'] += quantity - cleared_quantity
+                trades[scrip]['Short Value'] += total - (cleared_quantity * total / quantity)
+                trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
+
+                print "SELL NOT ENOUGH +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                print scrip
+                print trades[scrip]
+                print "------------------"
+
+
+        if "IDBI" in scrip:
+            print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+            print "--" + scrip + "--"
+            print trades[scrip]
+            print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+
+        # Prune
+        if trades[scrip]['Total Quantity'] == 0 and trades[scrip]['Short Quantity'] == 0 and trades[scrip]['Cleared'] == 0:
+            del(trades[scrip])
+
+        # Clean
+        if trades[scrip]['Total Quantity'] == 0:
+            trades[scrip]['Rate'] = 0
+
+        if trades[scrip]['Short Quantity'] == 0:
+            trades[scrip]['Short Rate'] = 0
+
+    # Prune again
+    trades = {k: v for k,v in trades.iteritems() if k == MISC_KEY or trades[k]['Total Quantity'] > 0 or trades[k]['Cleared'] <> 0}
 
     return trades
 
@@ -375,11 +460,11 @@ def generate_report(transactions):
 
     # ------------ Display results --------------
     # ------------ Save results to file --------------
-    
+
     with open('report.txt', 'a') as outfile:
         _saved_stdout = sys.stdout
         sys.stdout = writer(sys.stdout, outfile)
-       
+
         print
         print
         print "+" * 80
@@ -402,7 +487,7 @@ def generate_report(transactions):
         print
         print "+" * 80
         print
-        
+
         sys.stdout = _saved_stdout
 
 
@@ -492,7 +577,7 @@ def convert_to_table(data):
 
     data_table.append(head)
 
-    for key, value in data.items():
+    for key, value in sorted(data.iteritems()):
         if key == MISC_KEY:
             continue
 
@@ -587,13 +672,15 @@ if __name__ == '__main__':
             transactions.extend(cn_entries)
 
             processed_files.append(filename)
-   
+
     # Store
-    json.dump(transactions, open('trades.json', 'w'));
-    json.dump(processed_files, open('processed.json', 'w'));
+    json.dump(processed_files, open('processed.json', 'w'), indent=2);
 
     # Standardize transactions
     transactions = crunch_transactions(transactions)
+
+    # Store
+    json.dump(transactions, open('trades.json', 'w'), indent=2);
 
     # Start eating them
     trades = crunch_trades(transactions)
