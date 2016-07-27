@@ -316,7 +316,8 @@ def crunch_trades(transactions):
                 "Cleared": 0,
                 "Short Quantity": 0,
                 "Short Value": 0,
-                "Short Rate": 0
+                "Short Rate": 0,
+                "Total Trade Volume": 0
             }
 
         if "IDBI" in scrip:
@@ -407,11 +408,7 @@ def crunch_trades(transactions):
                 print "------------------"
 
 
-        if "IDBI" in scrip:
-            print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-            print "--" + scrip + "--"
-            print trades[scrip]
-            print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
+        trades[scrip]['Total Trade Volume'] += total
 
         # Prune
         if trades[scrip]['Total Quantity'] == 0 and trades[scrip]['Short Quantity'] == 0 and trades[scrip]['Cleared'] == 0:
@@ -442,7 +439,8 @@ def update_portfolio(trades, portfolio):
                 "Total Quantity": trades[scrip]["Total Quantity"],
                 "Total Value": trades[scrip]["Total Value"],
                 "Average Rate": trades[scrip]["Rate"],
-                "Cleared": trades[scrip]["Cleared"]
+                "Cleared": trades[scrip]["Cleared"],
+                "Total Trade Volume": trades[scrip]["Total Trade Volume"]
                 }
 
     portfolio[MISC_KEY] = {"Total Value": trades[MISC_KEY]["Total Value"]}
@@ -482,6 +480,7 @@ def generate_report(transactions):
         print " | F. CLEARED [LESS CHARGES]    : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
         print " | G. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), 'red') + " |"
         print " | H. BALANCE (F + G)           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
+        print " | I. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
         print "=" * 64
 
         print
@@ -501,6 +500,7 @@ def process_portfolio(portfolio):
     current_value = 0
     cleared = 0
     charges = 0
+    total_trade_volume = 0
 
     # Final
     for key in dict(portfolio):
@@ -528,6 +528,7 @@ def process_portfolio(portfolio):
             total += portfolio[key]["Total Value"]
             current_value += portfolio[key]["Current Value"]
             cleared += portfolio[key]["Cleared"]
+            total_trade_volume += portfolio[key]["Total Trade Volume"]
 
     exit_load = current_value * EXIT_LOAD_RATE
     cleared -= charges
@@ -544,7 +545,8 @@ def process_portfolio(portfolio):
                 "cleared": cleared,
                 "previous_balance": previous_balance,
                 "balance": balance,
-                "charges": charges
+                "charges": charges,
+                "total_trade_volume": total_trade_volume
             }
 
 """ Display the portfolio in tabular form
