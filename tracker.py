@@ -41,8 +41,6 @@ def get_market_price(symbol):
     base_url = 'http://finance.google.com/finance?q='
 
     if symbol not in KEYWORDS:
-        print "Scrip information not available!"
-
         raise Exception("New Scrip! Add Symbol!")
 
     symbol = KEYWORDS[symbol]
@@ -104,8 +102,6 @@ def parse_cn_file(filename):
 """ Process transactions from Contract Notes
 """
 def process_cn_entries(entries):
-    print "Processing transactions..."
-
     is_data = False
     is_scrip = False
     is_misc = False
@@ -320,12 +316,6 @@ def crunch_trades(transactions):
                 "Total Trade Volume": 0
             }
 
-        if "IDBI" in scrip:
-            print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-            print "--" + scrip + "--"
-            print trades[scrip]
-            print "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$"
-
         # BUY
         if transaction['Type'] == 'BUY':
             if trades[scrip]['Short Quantity'] == 0:
@@ -380,14 +370,14 @@ def crunch_trades(transactions):
                 print trades[scrip]
                 print "------------------"
             elif trades[scrip]['Total Quantity'] == 0:
-                print "SELL NOTHING IN STOCK +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                print "SELL NOTHING IN STOCK (BEFORE)+++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
                 print scrip
                 print trades[scrip]
                 print "------------------"
                 trades[scrip]['Short Quantity'] += quantity
                 trades[scrip]['Short Value'] += total
                 trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
-                print "SELL NOTHING IN STOCK +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
+                print "SELL NOTHING IN STOCK (AFTER)+++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
                 print scrip
                 print trades[scrip]
                 print "------------------"
@@ -652,6 +642,7 @@ def print_table(data_table):
 if __name__ == '__main__':
     transactions = []
     processed_files = []
+    misc_trades = []
 
     # Load existing transactions
     try:
@@ -673,6 +664,14 @@ if __name__ == '__main__':
             cn_entries = crunch_cn_entries(process_cn_entries(parse_cn_file(filename)))
             transactions.extend(cn_entries)
 
+            processed_files.append(filename)
+
+    # Parse MISC files
+    for filename in glob.glob('misc_trades*.json'):
+        if filename not in processed_files:
+            print "Processing file: " + filename + "..."
+            misc_trades = json.load(open(filename))
+            transactions.extend(misc_trades)
             processed_files.append(filename)
 
     # Store
