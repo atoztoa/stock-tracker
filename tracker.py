@@ -313,7 +313,8 @@ def crunch_trades(transactions):
                 "Short Quantity": 0,
                 "Short Value": 0,
                 "Short Rate": 0,
-                "Total Trade Volume": 0
+                "Total Trade Volume": 0,
+                "Total Brokerage": 0
             }
 
         # BUY
@@ -399,6 +400,8 @@ def crunch_trades(transactions):
 
 
         trades[scrip]['Total Trade Volume'] += total
+        
+        trades[scrip]['Total Brokerage'] += float(transaction["Brokerage"]) * quantity
 
         # Prune
         if trades[scrip]['Total Quantity'] == 0 and trades[scrip]['Short Quantity'] == 0 and trades[scrip]['Cleared'] == 0:
@@ -430,7 +433,8 @@ def update_portfolio(trades, portfolio):
                 "Total Value": trades[scrip]["Total Value"],
                 "Average Rate": trades[scrip]["Rate"],
                 "Cleared": trades[scrip]["Cleared"],
-                "Total Trade Volume": trades[scrip]["Total Trade Volume"]
+                "Total Trade Volume": trades[scrip]["Total Trade Volume"],
+                "Total Brokerage": trades[scrip]["Total Brokerage"]
                 }
 
     portfolio[MISC_KEY] = {"Total Value": trades[MISC_KEY]["Total Value"]}
@@ -471,6 +475,7 @@ def generate_report(transactions):
         print " | G. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), 'red') + " |"
         print " | H. BALANCE (F + G)           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
         print " | I. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
+        print " | J. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
         print "=" * 64
 
         print
@@ -491,6 +496,7 @@ def process_portfolio(portfolio):
     cleared = 0
     charges = 0
     total_trade_volume = 0
+    total_brokerage = 0
 
     # Final
     for key in dict(portfolio):
@@ -519,6 +525,7 @@ def process_portfolio(portfolio):
             current_value += portfolio[key]["Current Value"]
             cleared += portfolio[key]["Cleared"]
             total_trade_volume += portfolio[key]["Total Trade Volume"]
+            total_brokerage += portfolio[key]["Total Brokerage"]
 
     exit_load = current_value * EXIT_LOAD_RATE
     cleared -= charges
@@ -536,7 +543,8 @@ def process_portfolio(portfolio):
                 "previous_balance": previous_balance,
                 "balance": balance,
                 "charges": charges,
-                "total_trade_volume": total_trade_volume
+                "total_trade_volume": total_trade_volume,
+                "total_brokerage": total_brokerage
             }
 
 """ Display the portfolio in tabular form
@@ -646,14 +654,14 @@ if __name__ == '__main__':
 
     # Load existing transactions
     try:
-        with open('trades.json') as f:
+        with open('__trades.json') as f:
             transactions = json.load(f)
     except Exception as e:
         print e
 
     # Load processed file list
     try:
-        with open('processed.json') as f:
+        with open('__processed.json') as f:
             processed_files = json.load(f)
     except Exception as e:
         print e
@@ -675,13 +683,13 @@ if __name__ == '__main__':
             processed_files.append(filename)
 
     # Store
-    json.dump(processed_files, open('processed.json', 'w'), indent=2);
+    json.dump(processed_files, open('__processed.json', 'w'), indent=2);
 
     # Standardize transactions
     transactions = crunch_transactions(transactions)
 
     # Store
-    json.dump(transactions, open('trades.json', 'w'), indent=2);
+    json.dump(transactions, open('__trades.json', 'w'), indent=2);
 
     # Start eating them
     trades = crunch_trades(transactions)
