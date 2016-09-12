@@ -323,10 +323,6 @@ def crunch_trades(transactions):
                 trades[scrip]['Total Quantity'] += quantity
                 trades[scrip]['Total Value'] += total
                 trades[scrip]['Rate'] = trades[scrip]['Total Value'] / trades[scrip]['Total Quantity']
-                print "BUY NORMAL +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
-                print scrip
-                print trades[scrip]
-                print "------------------"
             else:
                 # Cover short
                 if trades[scrip]['Short Quantity'] >= quantity:
@@ -334,11 +330,6 @@ def crunch_trades(transactions):
                     trades[scrip]['Cleared'] += (quantity * trades[scrip]['Short Rate']) - total
                     trades[scrip]['Short Quantity'] -= quantity
                     trades[scrip]['Short Value'] = trades[scrip]['Short Quantity'] * trades[scrip]['Short Rate']
-
-                    print "BUY NOT ENOUGH +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
-                    print scrip
-                    print trades[scrip]
-                    print "------------------"
                 else:
                     # Cover short first
                     cover_quantity = trades[scrip]['Short Quantity']
@@ -351,11 +342,6 @@ def crunch_trades(transactions):
                     trades[scrip]['Total Quantity'] += buy_quantity
                     trades[scrip]['Total Value'] += (buy_quantity * total / quantity)
                     trades[scrip]['Rate'] = trades[scrip]['Total Value'] / trades[scrip]['Total Quantity']
-
-                    print "BUY COVERED +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
-                    print scrip
-                    print trades[scrip]
-                    print "------------------"
         else:
             # Have shares?
             if trades[scrip]['Total Quantity'] >= quantity:
@@ -365,23 +351,10 @@ def crunch_trades(transactions):
                 # The difference is covered by Cleared. Rate remains the same.
                 trades[scrip]['Total Quantity'] -= quantity
                 trades[scrip]['Total Value'] = trades[scrip]['Total Quantity'] * trades[scrip]['Rate']
-
-                print "SELL NORMAL +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
-                print scrip
-                print trades[scrip]
-                print "------------------"
             elif trades[scrip]['Total Quantity'] == 0:
-                print "SELL NOTHING IN STOCK (BEFORE)+++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
-                print scrip
-                print trades[scrip]
-                print "------------------"
                 trades[scrip]['Short Quantity'] += quantity
                 trades[scrip]['Short Value'] += total
                 trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
-                print "SELL NOTHING IN STOCK (AFTER)+++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
-                print scrip
-                print trades[scrip]
-                print "------------------"
             else:
                 # Partial short
                 cleared_quantity = trades[scrip]['Total Quantity']
@@ -393,14 +366,8 @@ def crunch_trades(transactions):
                 trades[scrip]['Short Value'] += total - (cleared_quantity * total / quantity)
                 trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
 
-                print "SELL NOT ENOUGH +++++++++++++++++++++++++++++" + str(quantity) + " - " + str(total)
-                print scrip
-                print trades[scrip]
-                print "------------------"
-
-
         trades[scrip]['Total Trade Volume'] += total
-        
+
         trades[scrip]['Total Brokerage'] += float(transaction["Brokerage"]) * quantity
 
         # Prune
@@ -472,10 +439,11 @@ def generate_report(transactions):
         print " | D. EXIT LOAD (ESTIMATED)     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
         print " | E. PROFIT/LOSS               : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
         print " | F. CLEARED [LESS CHARGES]    : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
-        print " | G. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), 'red') + " |"
-        print " | H. BALANCE (F + G)           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
-        print " | I. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
-        print " | J. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
+        print " | G. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), "red" if report['previous_balance'] < 0 else "green") + " |"
+        print " | H. DIVIDEND                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['dividend'])), 'green') + " |"
+        print " | I. BALANCE (F + G + H)       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
+        print " | J. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
+        print " | K. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
         print "=" * 64
 
         print
@@ -530,7 +498,8 @@ def process_portfolio(portfolio):
     exit_load = current_value * EXIT_LOAD_RATE
     cleared -= charges
     previous_balance = PREVIOUS_BALANCE
-    balance = previous_balance + cleared
+    dividend = get_total_dividend()
+    balance = previous_balance + cleared + dividend
     profit_percentage = profit / total * 100
 
     return {
@@ -541,6 +510,7 @@ def process_portfolio(portfolio):
                 "profit_percentage": profit_percentage,
                 "cleared": cleared,
                 "previous_balance": previous_balance,
+                "dividend": dividend,
                 "balance": balance,
                 "charges": charges,
                 "total_trade_volume": total_trade_volume,
@@ -645,11 +615,28 @@ def print_table(data_table):
 
         is_first = False
 
+
+def get_total_dividend():
+    # Load dividend
+    try:
+        with open('__dividends.json') as f:
+            dividends = json.load(f)
+    except Exception as e:
+        print e
+
+    total = 0
+
+    for entry in dividends:
+        total += float(entry["Total"])
+
+    return total
+
 """ Main
 """
 if __name__ == '__main__':
     transactions = []
     processed_files = []
+    dividends = []
     misc_trades = []
 
     # Load existing transactions
@@ -663,6 +650,13 @@ if __name__ == '__main__':
     try:
         with open('__processed.json') as f:
             processed_files = json.load(f)
+    except Exception as e:
+        print e
+
+    # Load dividend
+    try:
+        with open('__dividends.json') as f:
+            dividends = json.load(f)
     except Exception as e:
         print e
 
@@ -681,6 +675,17 @@ if __name__ == '__main__':
             misc_trades = json.load(open(filename))
             transactions.extend(misc_trades)
             processed_files.append(filename)
+
+    # Parse DIVIDENT files
+    for filename in glob.glob('dividend*.json'):
+        if filename not in processed_files:
+            print "Processing file: " + filename + "..."
+            dividend = json.load(open(filename))
+            dividends.extend(dividend)
+            processed_files.append(filename)
+
+    # Store
+    json.dump(dividends, open('__dividends.json', 'w'), indent=2);
 
     # Store
     json.dump(processed_files, open('__processed.json', 'w'), indent=2);
