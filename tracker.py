@@ -437,8 +437,8 @@ def generate_report(transactions):
         print " | B. CURRENT VALUE             : " + colored("{0:29}".format("₹ {:,.2f}".format(report['current_value'])), 'yellow') + " |"
         print " | C. CHARGES (ACTUAL)          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges'])), 'cyan') + " |"
         print " | D. EXIT LOAD (ESTIMATED)     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
-        print " | E. PROFIT/LOSS               : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
-        print " | F. CLEARED [LESS CHARGES]    : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
+        print " | E. PROFIT/LOSS [- EXIT LOAD] : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
+        print " | F. CLEARED [- CHARGES]       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
         print " | G. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), "red" if report['previous_balance'] < 0 else "green") + " |"
         print " | H. DIVIDEND                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['dividend'])), 'green') + " |"
         print " | I. BALANCE (F + G + H)       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
@@ -496,6 +496,7 @@ def process_portfolio(portfolio):
             total_brokerage += portfolio[key]["Total Brokerage"]
 
     exit_load = current_value * EXIT_LOAD_RATE
+    profit -= exit_load
     cleared -= charges
     previous_balance = PREVIOUS_BALANCE
     dividend = get_total_dividend()
