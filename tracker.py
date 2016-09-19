@@ -115,6 +115,7 @@ def process_cn_entries(entries):
 
     # New format?
     head = entries[0]
+    
     if len(head) == 14:
         is_new_html_format = True
 
@@ -201,7 +202,7 @@ def process_cn_entries(entries):
                 if entry[col]:
                     item[entry[4].strip("*").strip()] = entry[col]
 
-                # Finish
+                # Finished all entries for this scrip, cleanup
                 if "TOTAL STT" in entry[4] or not entry[col]:
                     is_scrip = False
                     is_data = False
@@ -241,7 +242,7 @@ def process_cn_entries(entries):
     # Misc Charges
     misc = {key:value for key,value in misc.items() if not any(k in key for k in scrap_keys)}
     misc['Total'] = sum(float(item) for key,item in misc.items())
-    misc['Type'] = "MISC"
+    misc['Type'] = MISC_KEY
     items.append(misc)
 
     return items
@@ -272,7 +273,7 @@ def crunch_transactions(entries):
     misc_total = 0
 
     for entry in entries:
-        if entry["Type"] == "MISC":
+        if entry["Type"] == MISC_KEY:
             misc_total += entry["Total"]
         else:
             if 'STT' in entry:
@@ -281,7 +282,7 @@ def crunch_transactions(entries):
 
     crunched_entries = sorted(crunched_entries, key=lambda k: (k['Security'], k['Trade Date'], k['Trade Time']))
 
-    crunched_entries.append({"Type": "MISC", "Total": misc_total})
+    crunched_entries.append({"Type": MISC_KEY, "Total": misc_total})
 
     return crunched_entries
 
