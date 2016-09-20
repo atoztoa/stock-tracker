@@ -51,7 +51,7 @@ def get_market_price(symbol):
     except Exception, msg:
         raise Exception("Error getting market price!")
 
-    soup = BeautifulSoup(html)
+    soup = BeautifulSoup(html, 'lxml')
 
     try:
         price_change = soup.find("div", { "class": "id-price-change" })
@@ -71,7 +71,7 @@ def parse_cn_file(filename):
     print "Processing file: " + filename + "..."
     html = open(filename).read()
 
-    soup = BeautifulSoup(html)
+    soup = BeautifulSoup(html, 'lxml')
 
     trade_date = soup.find('td', text = re.compile('TRADE DATE(.*)', re.DOTALL)).parent.findAll('td')[1].text
 
