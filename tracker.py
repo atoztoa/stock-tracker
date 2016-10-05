@@ -17,6 +17,7 @@ MISC_KEY = "--CHARGES--"
 
 COLUMNS = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Bought Qty', 'Sold Qty', 'Gross Rate', 'Gross Total', 'Brokerage', 'Net Rate', 'Service Tax', 'STT', 'Total', 'Trade Date']
 COLUMNS_NEW = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Buy/Sell', 'Quantity', 'Gross Rate', 'Brokerage', 'Net Rate', 'Closing Rate', 'Total', 'Remarks', 'Trade Date']
+LEDGER_COLUMNS = ['Date', 'Voucher', 'Bank Code', 'Cheque', 'Description', 'Debit', 'Credit', 'Balance']
 
 BROKERAGE_RATE = 0.004
 EXIT_LOAD_RATE = 0.004
@@ -115,7 +116,7 @@ def process_cn_entries(entries):
 
     # New format?
     head = entries[0]
-    
+
     if len(head) == 14:
         is_new_html_format = True
 
@@ -445,6 +446,7 @@ def generate_report(transactions):
         print " | I. BALANCE (F + G + H)       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
         print " | J. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
         print " | K. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
+        print " | L. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
         print "=" * 64
 
         print
@@ -496,6 +498,14 @@ def process_portfolio(portfolio):
             total_trade_volume += portfolio[key]["Total Trade Volume"]
             total_brokerage += portfolio[key]["Total Brokerage"]
 
+    # Look at Ledger
+    ledger_totals = get_ledger_totals()
+
+    total_transferred = ledger_totals["funds_transferred"]
+    charges += ledger_totals["charges_annual"]
+    charges += ledger_totals["charges_late"]
+    charges -= ledger_totals["charges_credit"]
+
     exit_load = current_value * EXIT_LOAD_RATE
     profit -= exit_load
     cleared -= charges
@@ -507,6 +517,7 @@ def process_portfolio(portfolio):
     return {
                 "total": total,
                 "current_value": current_value,
+                "total_funds_transferred": total_transferred,
                 "exit_load": exit_load,
                 "profit": profit,
                 "profit_percentage": profit_percentage,
@@ -618,6 +629,8 @@ def print_table(data_table):
         is_first = False
 
 
+""" Get the total dividend earned
+"""
 def get_total_dividend():
     # Load dividend
     try:
@@ -633,6 +646,105 @@ def get_total_dividend():
 
     return total
 
+
+""" Get the total amounts from Ledger
+"""
+def get_ledger_totals():
+    ledger_totals = {}
+
+    # Load ledgers
+    try:
+        with open('__ledgers.json') as f:
+            ledgers = json.load(f)
+    except Exception as e:
+        print e
+
+    ledger_totals = process_ledger_entries(ledgers)
+
+    return {
+            "charges_annual": ledger_totals["Maintenance Charges"],
+            "funds_transferred": ledger_totals["Transfer"],
+            "charges_credit": ledger_totals["Charges Reversed"],
+            "charges_late": ledger_totals["Late Charges"]
+    }
+
+""" Get data from Ledger file
+"""
+def parse_ledger_file(filename):
+    print "Processing file: " + filename + "..."
+    html = open(filename).read()
+
+    soup = BeautifulSoup(html)
+
+    table = soup.find("table", {"id": "GenTableBy"})
+
+    entries = []
+
+    for row in table.findAll("tr"):
+        entry = []
+
+        for cell in row.findAll("td"):
+            entry.append("".join(c for c in str(unicode(cell.string).encode('ascii', 'ignore')).strip() if c not in "*[]~"))
+
+        entries.append(entry)
+        #entries.append(dict(zip(LEDGER_COLUMNS, entry)))
+
+        # Ignore rest of the entries
+        #if "NET AMOUNT DUE" in "".join(entry):
+        #    break
+
+    return entries
+
+""" Process transactions from Ledger
+"""
+def process_ledger_entries(entries):
+    description_map = {
+        "To Bill": "Buy",
+        "OPENING BALANCE": "Opening Balance",
+        "Direct Credit": "Transfer",
+        "By Bill": "Sell",
+        "Amc": "Maintenance Charges",
+        "Delayed": "Late Charges",
+        "Dividend": "Dividend",
+        "Reversed": "Charges Reversed",
+        "Refunded": "Charges Reversed"
+    }
+
+    totals = {
+        "Buy": 0,
+        "Opening Balance": 0,
+        "Transfer": 0,
+        "Sell": 0,
+        "Maintenance Charges": 0,
+        "Late Charges": 0,
+        "Dividend": 0,
+        "Charges Reversed": 0
+    }
+
+    for entry in entries:
+        scrap_entries = [ "Opening Balance" ]
+
+        # Scrap unnecessary entries
+        if any(item in "".join(entry) for item in scrap_entries):
+            continue
+
+        # Clean
+        entry = [x.strip() for x in entry]
+
+        item = dict(zip(LEDGER_COLUMNS, entry))
+
+        scrap_keys = LEDGER_COLUMNS[1:4]
+        scrap_keys.append(LEDGER_COLUMNS[-1])
+
+        item = { key:value for key,value in item.items() if not any(k in key for k in scrap_keys)}
+
+        item["Description"] = [value for key,value in description_map.items() if key in item["Description"]][0]
+
+        totals[item["Description"]] += (float(item["Credit"]) if item["Credit"] else 0)
+        totals[item["Description"]] += (float(item["Debit"]) if item["Debit"] else 0)
+
+    return totals
+
 """ Main
 """
 if __name__ == '__main__':
@@ -640,6 +752,8 @@ if __name__ == '__main__':
     processed_files = []
     dividends = []
     misc_trades = []
+    ledgers = []
+    ledger_totals = {}
 
     # Load existing transactions
     try:
@@ -662,8 +776,15 @@ if __name__ == '__main__':
     except Exception as e:
         print e
 
-    # Parse HTML files
-    for filename in glob.glob('*.htm'):
+    # Load ledgers
+    try:
+        with open('__ledgers.json') as f:
+            ledgers = json.load(f)
+    except Exception as e:
+        print e
+
+    # Parse 'Contract Note' HTML files
+    for filename in glob.glob('CN*.htm*'):
         if filename not in processed_files:
             cn_entries = crunch_cn_entries(process_cn_entries(parse_cn_file(filename)))
             transactions.extend(cn_entries)
@@ -686,8 +807,18 @@ if __name__ == '__main__':
             dividends.extend(dividend)
             processed_files.append(filename)
 
+    # Parse Ledger files
+    for filename in glob.glob('Ledger*.htm*'):
+        if filename not in processed_files:
+            ledger = parse_ledger_file(filename)
+            ledgers.extend(ledger)
+            processed_files.append(filename)
+
     # Store
     json.dump(dividends, open('__dividends.json', 'w'), indent=2);
+
+    # Store
+    json.dump(ledgers, open('__ledgers.json', 'w'), indent=2);
 
     # Store
     json.dump(processed_files, open('__processed.json', 'w'), indent=2);
