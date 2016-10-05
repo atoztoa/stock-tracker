@@ -674,7 +674,7 @@ def parse_ledger_file(filename):
     print "Processing file: " + filename + "..."
     html = open(filename).read()
 
-    soup = BeautifulSoup(html)
+    soup = BeautifulSoup(html, 'lxml')
 
     table = soup.find("table", {"id": "GenTableBy"})
 
