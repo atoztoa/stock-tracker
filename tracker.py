@@ -80,9 +80,9 @@ def parse_cn_file(filename):
 
     entries = []
 
+    # Just read all rows first
     for row in table.findAll("tr"):
         entry = []
-
 
         for cell in row.findAll("td"):
             entry.append("".join(c for c in str(unicode(cell.string).encode('ascii', 'ignore')).strip() if c not in "*[]~"))
@@ -94,8 +94,11 @@ def parse_cn_file(filename):
         if len(entry) > 11 and "".join(entry):
             entries.append(entry)
 
-        # Ignore rest of the entries
-        if "NET AMOUNT DUE" in "".join(entry):
+    # Delete unwanted entries
+    for entry in reversed(entries):
+        if "NET AMOUNT DUE" not in "".join(entry):
+            entries.pop()
+        else:
             break
 
     return entries
@@ -234,9 +237,9 @@ def process_cn_entries(entries):
             if not entry[col - 1] or is_new_html_format:
                 misc[entry[4].strip("*").strip("[]").strip("~").strip()] = entry[col]
 
-        # Ignore rest of the entries
+        # Maybe there is entries from next Exchange after this?
         if "NET AMOUNT DUE" in "".join(entry):
-            break
+            is_misc = False
 
     scrap_keys = [ 'NET AMOUNT DUE TO', 'DR. TOTAL', 'CR. TOTAL' ]
 
