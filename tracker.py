@@ -441,6 +441,9 @@ def generate_report(transactions):
         print " | A. TOTAL INVESTMENT          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total'])), 'white') + " |"
         print " | B. CURRENT VALUE             : " + colored("{0:29}".format("₹ {:,.2f}".format(report['current_value'])), 'yellow') + " |"
         print " | C. CHARGES (ACTUAL)          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges'])), 'cyan') + " |"
+        print " | C1. ANNUAL CHARGES           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_annual'])), 'cyan') + " |"
+        print " | C2. LATE PAYMENT CHARGES     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_late'])), 'cyan') + " |"
+        print " | C3. CHARGES REFUND           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_credit'])), 'cyan') + " |"
         print " | D. EXIT LOAD (ESTIMATED)     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
         print " | E. PROFIT/LOSS [- EXIT LOAD] : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
         print " | F. CLEARED [- CHARGES]       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
@@ -505,9 +508,12 @@ def process_portfolio(portfolio):
     ledger_totals = get_ledger_totals()
 
     total_transferred = ledger_totals["funds_transferred"]
-    charges += ledger_totals["charges_annual"]
-    charges += ledger_totals["charges_late"]
-    charges -= ledger_totals["charges_credit"]
+    charges_annual = ledger_totals["charges_annual"]
+    charges_late = ledger_totals["charges_late"]
+    charges_credit = ledger_totals["charges_credit"]
+    charges += charges_annual
+    charges += charges_late
+    charges -= charges_credit
 
     exit_load = current_value * EXIT_LOAD_RATE
     profit -= exit_load
@@ -529,6 +535,9 @@ def process_portfolio(portfolio):
                 "dividend": dividend,
                 "balance": balance,
                 "charges": charges,
+                "charges_annual": charges_annual,
+                "charges_late": charges_late,
+                "charges_credit": charges_credit,
                 "total_trade_volume": total_trade_volume,
                 "total_brokerage": total_brokerage
             }
@@ -666,8 +675,8 @@ def get_ledger_totals():
 
     return {
             "charges_annual": ledger_totals["Maintenance Charges"],
-            "funds_transferred": ledger_totals["Transfer"],
-            "charges_credit": ledger_totals["Charges Reversed"],
+            "funds_transferred": -(ledger_totals["Transfer"]),
+            "charges_credit": -(ledger_totals["Charges Reversed"]),
             "charges_late": ledger_totals["Late Charges"]
     }
 
@@ -743,7 +752,7 @@ def process_ledger_entries(entries):
 
         item["Description"] = [value for key,value in description_map.items() if key in item["Description"]][0]
 
-        totals[item["Description"]] += (float(item["Credit"]) if item["Credit"] else 0)
+        totals[item["Description"]] -= (float(item["Credit"]) if item["Credit"] else 0)
         totals[item["Description"]] += (float(item["Debit"]) if item["Debit"] else 0)
 
     return totals
