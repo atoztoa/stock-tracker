@@ -453,6 +453,7 @@ def generate_report(transactions):
         print " | J. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
         print " | K. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
         print " | L. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
+        print " | M. SO WHAT DO YOU THINK???   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['verdict'])), "red" if report['verdict'] < 0 else "green") + " |"
         print "=" * 64
 
         print
@@ -522,6 +523,7 @@ def process_portfolio(portfolio):
     dividend = get_total_dividend()
     balance = previous_balance + cleared + dividend
     profit_percentage = profit / total * 100
+    verdict = balance + profit
 
     return {
                 "total": total,
@@ -539,7 +541,8 @@ def process_portfolio(portfolio):
                 "charges_late": charges_late,
                 "charges_credit": charges_credit,
                 "total_trade_volume": total_trade_volume,
-                "total_brokerage": total_brokerage
+                "total_brokerage": total_brokerage,
+                "verdict": verdict
             }
 
 """ Display the portfolio in tabular form
