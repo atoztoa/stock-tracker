@@ -453,7 +453,7 @@ def generate_report(transactions):
         print " | J. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
         print " | K. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
         print " | L. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
-        print " | M. SO WHAT DO YOU THINK???   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['verdict'])), "red" if report['verdict'] < 0 else "green") + " |"
+        print " | M. SO WHAT IS THE VERDICT??  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['verdict'])), "red" if report['verdict'] < 0 else "green") + " |"
         print "=" * 64
 
         print
