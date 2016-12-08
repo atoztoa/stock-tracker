@@ -46,25 +46,34 @@ def get_market_price(symbol):
 
     symbol = KEYWORDS[symbol]
 
-    try:
-        response = urllib2.urlopen(base_url + symbol)
-        html = response.read()
-    except Exception, msg:
-        raise Exception("Error getting market price!")
+    retries = 2
 
-    soup = BeautifulSoup(html, 'lxml')
+    while True:
+        try:
+            response = urllib2.urlopen(base_url + symbol)
+            html = response.read()
+        except Exception, msg:
+            if retries > 0:
+                retries -= 1
+            else:
+                raise Exception("Error getting market price!")
 
-    try:
-        price_change = soup.find("div", { "class": "id-price-change" })
-        price_change = price_change.find("span").find_all("span")
-        price_change = [x.string for x in price_change]
+        soup = BeautifulSoup(html, 'lxml')
 
-        price = soup.find_all("span", id=re.compile('^ref_.*_l$'))[0].string
-        price = str(unicode(price).encode('ascii', 'ignore')).strip().replace(",", "")
+        try:
+            price_change = soup.find("div", { "class": "id-price-change" })
+            price_change = price_change.find("span").find_all("span")
+            price_change = [x.string for x in price_change]
 
-        return (price, price_change)
-    except Exception as e:
-        raise Exception("Can't get current rate for scrip: " + symbol)
+            price = soup.find_all("span", id=re.compile('^ref_.*_l$'))[0].string
+            price = str(unicode(price).encode('ascii', 'ignore')).strip().replace(",", "")
+
+            return (price, price_change)
+        except Exception as e:
+            if retries > 0:
+                retries -= 1
+            else:
+                raise Exception("Can't get current rate for scrip: " + symbol)
 
 """ Get transaction data from Contract Note file
 """
