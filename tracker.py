@@ -21,6 +21,7 @@ LEDGER_COLUMNS = ['Date', 'Voucher', 'Bank Code', 'Cheque', 'Description', 'Debi
 
 BROKERAGE_RATE = 0.004
 EXIT_LOAD_RATE = 0.004
+CAPITAL_GAIN_TAX_RATE = 0.15
 
 PREVIOUS_BALANCE = -20000.00
 
@@ -453,16 +454,17 @@ def generate_report(transactions):
         print " | C1. ANNUAL CHARGES           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_annual'])), 'cyan') + " |"
         print " | C2. LATE PAYMENT CHARGES     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_late'])), 'cyan') + " |"
         print " | C3. CHARGES REFUND           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_credit'])), 'cyan') + " |"
-        print " | D. EXIT LOAD (ESTIMATED)     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
-        print " | E. PROFIT/LOSS [- EXIT LOAD] : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
-        print " | F. CLEARED [- CHARGES]       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
-        print " | G. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), "red" if report['previous_balance'] < 0 else "green") + " |"
-        print " | H. DIVIDEND                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['dividend'])), 'green') + " |"
-        print " | I. BALANCE (F + G + H)       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
-        print " | J. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
-        print " | K. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
-        print " | L. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
-        print " | M. SO WHAT IS THE VERDICT??  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['verdict'])), "red" if report['verdict'] < 0 else "green") + " |"
+        print " | D. CAPITAL GAIN TAX (APPROX) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['capital_gain_tax'])), 'cyan') + " |"
+        print " | E. EXIT LOAD [+ TAX] (APPROX): " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
+        print " | F. PROFIT/LOSS [- EXIT LOAD] : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
+        print " | G. CLEARED [- CHARGES]       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
+        print " | H. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), "red" if report['previous_balance'] < 0 else "green") + " |"
+        print " | I. DIVIDEND                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['dividend'])), 'green') + " |"
+        print " | J. BALANCE (F + G + H)       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
+        print " | K. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
+        print " | L. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
+        print " | M. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
+        print " | N. SO WHAT IS THE VERDICT??  : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['verdict'], report['verdict_percentage'])), "red" if report['verdict'] < 0 else "green") + " |"
         print "=" * 64
 
         print
@@ -525,14 +527,16 @@ def process_portfolio(portfolio):
     charges += charges_late
     charges -= charges_credit
 
-    exit_load = current_value * EXIT_LOAD_RATE
-    profit -= exit_load
     cleared -= charges
+    capital_gain_tax = cleared * CAPITAL_GAIN_TAX_RATE
+    exit_load = (current_value * EXIT_LOAD_RATE) + capital_gain_tax
+    profit -= exit_load
     previous_balance = PREVIOUS_BALANCE
     dividend = get_total_dividend()
     balance = previous_balance + cleared + dividend
     profit_percentage = profit / total * 100
     verdict = balance + profit
+    verdict_percentage = verdict / total_transferred * 100
 
     return {
                 "total": total,
@@ -541,6 +545,7 @@ def process_portfolio(portfolio):
                 "exit_load": exit_load,
                 "profit": profit,
                 "profit_percentage": profit_percentage,
+                "capital_gain_tax": capital_gain_tax,
                 "cleared": cleared,
                 "previous_balance": previous_balance,
                 "dividend": dividend,
@@ -551,7 +556,8 @@ def process_portfolio(portfolio):
                 "charges_credit": charges_credit,
                 "total_trade_volume": total_trade_volume,
                 "total_brokerage": total_brokerage,
-                "verdict": verdict
+                "verdict": verdict,
+                "verdict_percentage": verdict_percentage
             }
 
 """ Display the portfolio in tabular form
