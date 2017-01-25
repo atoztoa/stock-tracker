@@ -318,6 +318,10 @@ def crunch_trades(transactions):
         quantity = float(transaction['Quantity'])
         total = float(transaction["Total"])
 
+        # Kludge
+        if scrip == 'ITC  LTD':
+            scrip = 'I T C'
+
         # Blank entry
         if scrip not in trades:
             trades[scrip] = {
