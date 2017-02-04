@@ -11,8 +11,6 @@ from termcolor import colored
 import sys
 
 # ------- CONSTANTS --------- #
-KEYWORDS = json.load(open("scrip.json"))
-
 MISC_KEY = "--CHARGES--"
 
 COLUMNS = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Bought Qty', 'Sold Qty', 'Gross Rate', 'Gross Total', 'Brokerage', 'Net Rate', 'Service Tax', 'STT', 'Total', 'Trade Date']
@@ -27,7 +25,7 @@ PREVIOUS_BALANCE = -20000.00
 
 """ Custom class for printing to file
 """
-class writer:
+class Writer:
     def __init__(self, *writers) :
         self.writers = writers
 
@@ -35,46 +33,61 @@ class writer:
         for w in self.writers :
             w.write(text)
 
-""" Get current market price
+""" Class for managing scrips
 """
-def get_market_price(symbol):
-    print "Getting market price: " + symbol
+class Scrip:
+    URL = "http://finance.google.com/finance/info?q="
 
-    base_url = 'http://finance.google.com/finance?q='
+    def __init__(self):
+        self.title = {}
+        self.scrip = {}
 
-    if symbol not in KEYWORDS:
-        raise Exception("New Scrip! Add Symbol!")
+        self.load_titles()
+        self.fetch_price()
 
-    symbol = KEYWORDS[symbol]
+    def get_scrip_from_title(self, title):
+        if title not in self.title:
+            raise Exception("New Scrip! Add to scrip.json! [ {} ]".format(title))
 
-    retries = 2
+        return self.title[title]
 
-    while True:
-        try:
-            response = urllib2.urlopen(base_url + symbol)
-            html = response.read()
-        except Exception, msg:
-            if retries > 0:
-                retries -= 1
-            else:
-                raise Exception("Error getting market price!")
+    def get_title_from_scrip(self, scrip):
+        return self.scrip[scrip]['title']
 
-        soup = BeautifulSoup(html, 'lxml')
+    def get_price(self, scrip):
+        scrip = self.scrip[scrip]
 
-        try:
-            price_change = soup.find("div", { "class": "id-price-change" })
-            price_change = price_change.find("span").find_all("span")
-            price_change = [x.string for x in price_change]
+        price = str(scrip['price'])
+        price_change = [scrip['change'], scrip['change_percentage']]
 
-            price = soup.find_all("span", id=re.compile('^ref_.*_l$'))[0].string
-            price = str(unicode(price).encode('ascii', 'ignore')).strip().replace(",", "")
+        return (price, price_change)
 
-            return (price, price_change)
-        except Exception as e:
-            if retries > 0:
-                retries -= 1
-            else:
-                raise Exception("Can't get current rate for scrip: " + symbol)
+    def load_titles(self):
+        # List of titles
+        self.title = json.load(open("scrip.json"))
+
+        for k, v in self.title.items():
+            self.scrip[v] = { 'title': k }
+
+    def fetch_price(self):
+        scrip_list = ",".join(self.scrip.keys())
+
+        url = Scrip.URL + scrip_list
+
+        response = urllib2.urlopen(url).read()
+
+        # Remove leading '//'
+        response = response[4:]
+
+        response = json.loads(response)
+
+        # Let's parse
+        for item in response:
+            scrip = item['e'] + ':' + item['t']
+
+            self.scrip[scrip]['price'] = item['l'].replace(',', '')
+            self.scrip[scrip]['change'] = item['c'].replace(',', '')
+            self.scrip[scrip]['change_percentage'] = item['cp'].replace(',', '')
 
 """ Get transaction data from Contract Note file
 """
@@ -300,6 +313,14 @@ def crunch_transactions(entries):
 
     return crunched_entries
 
+""" Calculate profit for a trade
+"""
+def calculate_profit(buy_value, sell_value):
+    profit = sell_value - buy_value
+    profit_percentage = profit / buy_value * 100
+
+    return (profit, profit_percentage)
+
 """ Crunch trades
 """
 def crunch_trades(transactions):
@@ -329,6 +350,9 @@ def crunch_trades(transactions):
                 "Total Value": 0,
                 "Rate": 0,
                 "Cleared": 0,
+                "Cleared Percentage": 0,
+                "Total Buy Value": 0,
+                "Total Sell Value": 0,
                 "Short Quantity": 0,
                 "Short Value": 0,
                 "Short Rate": 0,
@@ -346,13 +370,18 @@ def crunch_trades(transactions):
                 # Cover short
                 if trades[scrip]['Short Quantity'] >= quantity:
                     # Not enough to cover all
-                    trades[scrip]['Cleared'] += (quantity * trades[scrip]['Short Rate']) - total
+                    trades[scrip]['Total Buy Value'] += total
+                    trades[scrip]['Total Sell Value'] += (quantity * trades[scrip]['Short Rate'])
+
                     trades[scrip]['Short Quantity'] -= quantity
                     trades[scrip]['Short Value'] = trades[scrip]['Short Quantity'] * trades[scrip]['Short Rate']
                 else:
                     # Cover short first
                     cover_quantity = trades[scrip]['Short Quantity']
-                    trades[scrip]['Cleared'] += (cover_quantity * trades[scrip]['Short Rate']) - (cover_quantity * total / quantity)
+
+                    trades[scrip]['Total Buy Value'] += (cover_quantity * total / quantity)
+                    trades[scrip]['Total Sell Value'] += (cover_quantity * trades[scrip]['Short Rate'])
+
                     trades[scrip]['Short Quantity'] = 0
                     trades[scrip]['Short Value'] = 0
 
@@ -365,7 +394,8 @@ def crunch_trades(transactions):
             # Have shares?
             if trades[scrip]['Total Quantity'] >= quantity:
                 # Calculate cleared value
-                trades[scrip]['Cleared'] += total - (quantity * trades[scrip]['Rate'])
+                trades[scrip]['Total Buy Value'] += quantity * trades[scrip]['Rate']
+                trades[scrip]['Total Sell Value'] += total
 
                 # The difference is covered by Cleared. Rate remains the same.
                 trades[scrip]['Total Quantity'] -= quantity
@@ -377,7 +407,11 @@ def crunch_trades(transactions):
             else:
                 # Partial short
                 cleared_quantity = trades[scrip]['Total Quantity']
-                trades[scrip]['Cleared'] += (cleared_quantity * total / quantity) - trades[scrip]['Total Value']
+                #trades[scrip]['Cleared'] += (cleared_quantity * total / quantity) - trades[scrip]['Total Value']
+
+                trades[scrip]['Total Buy Value'] += trades[scrip]['Total Value']
+                trades[scrip]['Total Sell Value'] += (cleared_quantity * total / quantity)
+
                 trades[scrip]['Total Quantity'] = 0
                 trades[scrip]['Total Value'] = 0
 
@@ -390,7 +424,7 @@ def crunch_trades(transactions):
         trades[scrip]['Total Brokerage'] += float(transaction["Brokerage"]) * quantity
 
         # Prune
-        if trades[scrip]['Total Quantity'] == 0 and trades[scrip]['Short Quantity'] == 0 and trades[scrip]['Cleared'] == 0:
+        if trades[scrip]['Total Quantity'] == 0 and trades[scrip]['Short Quantity'] == 0 and trades[scrip]['Total Buy Value'] == 0:
             del(trades[scrip])
 
         # Clean
@@ -399,6 +433,13 @@ def crunch_trades(transactions):
 
         if trades[scrip]['Short Quantity'] == 0:
             trades[scrip]['Short Rate'] = 0
+
+    # How much did we clear?
+    for k, v in trades.items():
+        if k == MISC_KEY or v['Total Buy Value'] == 0:
+            continue
+
+        v['Cleared'], v['Cleared Percentage'] = calculate_profit(v['Total Buy Value'], v['Total Sell Value'])
 
     # Prune again
     trades = {k: v for k,v in trades.iteritems() if k == MISC_KEY or trades[k]['Total Quantity'] > 0 or trades[k]['Cleared'] <> 0}
@@ -419,6 +460,7 @@ def update_portfolio(trades, portfolio):
                 "Total Value": trades[scrip]["Total Value"],
                 "Average Rate": trades[scrip]["Rate"],
                 "Cleared": trades[scrip]["Cleared"],
+                "Cleared Percentage": trades[scrip]["Cleared Percentage"],
                 "Total Trade Volume": trades[scrip]["Total Trade Volume"],
                 "Total Brokerage": trades[scrip]["Total Brokerage"]
                 }
@@ -441,7 +483,7 @@ def generate_report(transactions):
 
     with open('report.txt', 'a') as outfile:
         _saved_stdout = sys.stdout
-        sys.stdout = writer(sys.stdout, outfile)
+        sys.stdout = Writer(sys.stdout, outfile)
 
         print
         print
@@ -464,7 +506,7 @@ def generate_report(transactions):
         print " | G. CLEARED [- CHARGES]       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
         print " | H. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), "red" if report['previous_balance'] < 0 else "green") + " |"
         print " | I. DIVIDEND                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['dividend'])), 'green') + " |"
-        print " | J. BALANCE (F + G + H)       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
+        print " | J. BALANCE (G + H + I)       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
         print " | K. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
         print " | L. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
         print " | M. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
@@ -498,7 +540,8 @@ def process_portfolio(portfolio):
             charges = portfolio[key]["Total Value"]
             portfolio[key]["Total Value"] = round(portfolio[key]["Total Value"], 2)
         else:
-            market_rate = get_market_price(key)
+            market_rate = scrip.get_price(scrip.get_scrip_from_title(key))
+
             portfolio[key]["Market Rate"] = float(market_rate[0])
             portfolio[key]["Market Change"] = market_rate[1]
 
@@ -519,6 +562,9 @@ def process_portfolio(portfolio):
             cleared += portfolio[key]["Cleared"]
             total_trade_volume += portfolio[key]["Total Trade Volume"]
             total_brokerage += portfolio[key]["Total Brokerage"]
+
+            # Add Cleared Percentage
+            portfolio[key]["Cleared"] = (portfolio[key]["Cleared"], portfolio[key]["Cleared Percentage"])
 
     # Look at Ledger
     ledger_totals = get_ledger_totals()
@@ -630,13 +676,18 @@ def print_table(data_table):
             if is_first:
                 print "| {0:^20}".format(entry),
             else:
-                if entry == 0:
+                if entry == 0 or (isinstance(entry, tuple) and entry[0] == 0) :
                     print "| " + colored("{0:^20}".format("_._"), 'grey'),
                 elif entry == "_INVALID_":
                     print "| " + colored("{0:^20}".format("_INVALID_"), 'red'),
                 else:
-                    if head[i] == "Profit/Loss" or head[i] == "ROI" or head[i] == "Cleared":
+                    if head[i] == "Profit/Loss" or head[i] == "ROI":
                         if entry < 0:
+                            color = 'red'
+                        else:
+                            color = 'green'
+                    elif head[i] == "Cleared":
+                        if entry[0] < 0:
                             color = 'red'
                         else:
                             color = 'green'
@@ -647,6 +698,8 @@ def print_table(data_table):
                         print "| " + colored("{0:20}".format(entry), color),
                     elif head[i] == "Market Rate":
                         print "| " + colored("{0:>20}".format(entry), color),
+                    elif head[i] == "Cleared":
+                        print "| " + colored("{0:>20}".format("{:,.2f} [{:.2f}%]".format(entry[0], entry[1])), color),
                     else:
                         if head[i] == "ROI":
                             print "| " + colored("{0:>20}".format('{0:.2f}%'.format(entry)), color),
@@ -782,6 +835,9 @@ def process_ledger_entries(entries):
 """ Main
 """
 if __name__ == '__main__':
+    # Setup scrips
+    scrip = Scrip()
+
     transactions = []
     processed_files = []
     dividends = []
