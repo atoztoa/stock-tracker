@@ -548,12 +548,12 @@ def process_portfolio(portfolio):
             if portfolio[key]["Total Value"] > 0:
                 portfolio[key]["Current Value"] = portfolio[key]["Total Quantity"] * portfolio[key]["Market Rate"]
                 portfolio[key]["Profit/Loss"] = portfolio[key]["Current Value"] - portfolio[key]["Total Value"]
-                portfolio[key]["ROI"] = portfolio[key]["Profit/Loss"] / portfolio[key]["Total Value"] * 100
+                portfolio[key]["Profit/Loss Percentage"] = portfolio[key]["Profit/Loss"] / portfolio[key]["Total Value"] * 100
                 portfolio[key]["Average Rate"] = portfolio[key]["Total Value"] / portfolio[key]["Total Quantity"]
             else:
                 portfolio[key]["Current Value"] = 0
                 portfolio[key]["Profit/Loss"] = 0
-                portfolio[key]["ROI"] = 0
+                portfolio[key]["Profit/Loss Percentage"] = 0
                 portfolio[key]["Average Rate"] = 0
 
             profit += portfolio[key]["Profit/Loss"]
@@ -562,6 +562,9 @@ def process_portfolio(portfolio):
             cleared += portfolio[key]["Cleared"]
             total_trade_volume += portfolio[key]["Total Trade Volume"]
             total_brokerage += portfolio[key]["Total Brokerage"]
+
+            # Add Profit/Loss Percentage
+            portfolio[key]["Profit/Loss"] = (portfolio[key]["Profit/Loss"], portfolio[key]["Profit/Loss Percentage"])
 
             # Add Cleared Percentage
             portfolio[key]["Cleared"] = (portfolio[key]["Cleared"], portfolio[key]["Cleared Percentage"])
@@ -629,7 +632,6 @@ head = [
         'Market Rate',
         'Current Value',
         'Profit/Loss',
-        'ROI',
         'Cleared'
         ]
 
@@ -681,12 +683,7 @@ def print_table(data_table):
                 elif entry == "_INVALID_":
                     print "| " + colored("{0:^20}".format("_INVALID_"), 'red'),
                 else:
-                    if head[i] == "Profit/Loss" or head[i] == "ROI":
-                        if entry < 0:
-                            color = 'red'
-                        else:
-                            color = 'green'
-                    elif head[i] == "Cleared":
+                    if head[i] == "Profit/Loss" or head[i] == "Cleared":
                         if entry[0] < 0:
                             color = 'red'
                         else:
@@ -698,13 +695,10 @@ def print_table(data_table):
                         print "| " + colored("{0:20}".format(entry), color),
                     elif head[i] == "Market Rate":
                         print "| " + colored("{0:>20}".format(entry), color),
-                    elif head[i] == "Cleared":
-                        print "| " + colored("{0:>20}".format("{:,.2f} [{:.2f}%]".format(entry[0], entry[1])), color),
+                    elif head[i] == "Profit/Loss" or head[i] == "Cleared":
+                        print "| " + colored("{0:>20}".format("{:,.2f} ({:.2f}%)".format(entry[0], entry[1])), color),
                     else:
-                        if head[i] == "ROI":
-                            print "| " + colored("{0:>20}".format('{0:.2f}%'.format(entry)), color),
-                        else:
-                            print "| " + colored("{0:>20}".format('{0:.2f}'.format(entry)), color),
+                        print "| " + colored("{0:>20}".format('{0:.2f}'.format(entry)), color),
 
         print "|"
 
