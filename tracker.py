@@ -500,6 +500,7 @@ def generate_report(transactions):
         print " | C1. ANNUAL CHARGES           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_annual'])), 'cyan') + " |"
         print " | C2. LATE PAYMENT CHARGES     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_late'])), 'cyan') + " |"
         print " | C3. CHARGES REFUND           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_credit'])), 'cyan') + " |"
+        print " | C4. SERVICE TAX              : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_st'])), 'cyan') + " |"
         print " | D. CAPITAL GAIN TAX (APPROX) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['capital_gain_tax'])), 'cyan') + " |"
         print " | E. EXIT LOAD [+ TAX] (APPROX): " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
         print " | F. PROFIT/LOSS [- EXIT LOAD] : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
@@ -576,8 +577,10 @@ def process_portfolio(portfolio):
     charges_annual = ledger_totals["charges_annual"]
     charges_late = ledger_totals["charges_late"]
     charges_credit = ledger_totals["charges_credit"]
+    charges_st = ledger_totals["charges_st"]
     charges += charges_annual
     charges += charges_late
+    charges += charges_st
     charges -= charges_credit
 
     cleared -= charges
@@ -607,6 +610,7 @@ def process_portfolio(portfolio):
                 "charges_annual": charges_annual,
                 "charges_late": charges_late,
                 "charges_credit": charges_credit,
+                "charges_st": charges_st,
                 "total_trade_volume": total_trade_volume,
                 "total_brokerage": total_brokerage,
                 "verdict": verdict,
@@ -731,14 +735,14 @@ def get_total_dividend():
 """ Get the total amounts from Ledger
 """
 def get_ledger_totals():
+    ledgers = []
     ledger_totals = {}
 
-    # Load ledgers
-    try:
-        with open('__ledgers.json') as f:
-            ledgers = json.load(f)
-    except Exception as e:
-        print e
+    # Parse Ledger files
+    for filename in glob.glob('Ledger*.htm*'):
+        if filename not in processed_files:
+            ledger = parse_ledger_file(filename)
+            ledgers.extend(ledger)
 
     ledger_totals = process_ledger_entries(ledgers)
 
@@ -746,7 +750,8 @@ def get_ledger_totals():
             "charges_annual": ledger_totals["Maintenance Charges"],
             "funds_transferred": -(ledger_totals["Transfer"]),
             "charges_credit": -(ledger_totals["Charges Reversed"]),
-            "charges_late": ledger_totals["Late Charges"]
+            "charges_late": ledger_totals["Late Charges"],
+            "charges_st": ledger_totals["Service Tax"]
     }
 
 """ Get data from Ledger file
@@ -768,11 +773,6 @@ def parse_ledger_file(filename):
             entry.append("".join(c for c in str(unicode(cell.string).encode('ascii', 'ignore')).strip() if c not in "*[]~"))
 
         entries.append(entry)
-        #entries.append(dict(zip(LEDGER_COLUMNS, entry)))
-
-        # Ignore rest of the entries
-        #if "NET AMOUNT DUE" in "".join(entry):
-        #    break
 
     return entries
 
@@ -788,7 +788,8 @@ def process_ledger_entries(entries):
         "Delayed": "Late Charges",
         "Dividend": "Dividend",
         "Reversed": "Charges Reversed",
-        "Refunded": "Charges Reversed"
+        "Refunded": "Charges Reversed",
+        "Service Tax": "Service Tax"
     }
 
     totals = {
@@ -799,7 +800,8 @@ def process_ledger_entries(entries):
         "Maintenance Charges": 0,
         "Late Charges": 0,
         "Dividend": 0,
-        "Charges Reversed": 0
+        "Charges Reversed": 0,
+        "Service Tax": 0
     }
 
     for entry in entries:
@@ -836,8 +838,6 @@ if __name__ == '__main__':
     processed_files = []
     dividends = []
     misc_trades = []
-    ledgers = []
-    ledger_totals = {}
 
     # Load existing transactions
     try:
@@ -857,13 +857,6 @@ if __name__ == '__main__':
     try:
         with open('__dividends.json') as f:
             dividends = json.load(f)
-    except Exception as e:
-        print e
-
-    # Load ledgers
-    try:
-        with open('__ledgers.json') as f:
-            ledgers = json.load(f)
     except Exception as e:
         print e
 
@@ -891,18 +884,9 @@ if __name__ == '__main__':
             dividends.extend(dividend)
             processed_files.append(filename)
 
-    # Parse Ledger files
-    for filename in glob.glob('Ledger*.htm*'):
-        if filename not in processed_files:
-            ledger = parse_ledger_file(filename)
-            ledgers.extend(ledger)
-            processed_files.append(filename)
 
     # Store
     json.dump(dividends, open('__dividends.json', 'w'), indent=2);
-
-    # Store
-    json.dump(ledgers, open('__ledgers.json', 'w'), indent=2);
 
     # Store
     json.dump(processed_files, open('__processed.json', 'w'), indent=2);
