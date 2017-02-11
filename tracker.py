@@ -700,7 +700,6 @@ def convert_to_table(data):
 """ Print the two dimentional list as a table
 """
 def print_table(data_table):
-    print data_table
     for i, entry in enumerate(data_table[0]):
         print "+ {0:-^{width}}".format("", width=HEADINGS[i][1]),
 
