@@ -17,7 +17,22 @@ COLUMNS = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Bou
 COLUMNS_NEW = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Buy/Sell', 'Quantity', 'Gross Rate', 'Brokerage', 'Net Rate', 'Closing Rate', 'Total', 'Remarks', 'Trade Date']
 LEDGER_COLUMNS = ['Date', 'Voucher', 'Bank Code', 'Cheque', 'Description', 'Debit', 'Credit', 'Balance']
 
-BROKERAGE_RATE = 0.004
+# Title, Width, Alignment
+HEADINGS = [
+        ('Scrip', 20, '^'),
+        ('Total Quantity', 20, '^'),
+        ('Total Value', 20, '^'),
+        ('Average Rate', 20, '^'),
+        ('Market Rate', 20, '^'),
+        ('Current Value', 20, '^'),
+        ('Profit/Loss', 20, '^'),
+        ('Cleared', 20, '^'),
+        ('Intraday', 20, '^')
+        ]
+
+
+BROKERAGE_RATE_INTRADAY = 0.00035
+BROKERAGE_RATE_DELIVERY = 0.0035
 EXIT_LOAD_RATE = 0.004
 CAPITAL_GAIN_TAX_RATE = 0.15
 
@@ -126,6 +141,47 @@ def parse_cn_file(filename):
 
     return entries
 
+""" Process a single entry from CN
+"""
+def process_cn_entry(entry, is_new_html_format=False):
+    processed_entry = {}
+
+    if is_new_html_format:
+        processed_entry.update(dict(zip(COLUMNS_NEW, entry)))
+    else:
+        processed_entry.update(dict(zip(COLUMNS, entry)))
+
+    if is_new_html_format:
+        processed_entry['Type'] = "SELL" if processed_entry['Buy/Sell'] == 'S' else "BUY"
+    else:
+        if 'Sold Qty' in processed_entry and processed_entry['Sold Qty']:
+            processed_entry['Type'] = "SELL"
+            processed_entry['Quantity'] = processed_entry.pop("Sold Qty")
+        elif 'Bought Qty' in processed_entry and processed_entry['Bought Qty']:
+            processed_entry['Type'] = "BUY"
+            processed_entry['Quantity'] = processed_entry.pop("Bought Qty")
+
+    # Total is always positive value
+    if(float(processed_entry['Total']) < 0):
+        processed_entry['Total'] = str(abs(float(processed_entry['Total'])))
+
+    # Is this intraday?
+    brokerage_rate = float(processed_entry['Brokerage']) / float(processed_entry['Gross Rate'])
+
+    if brokerage_rate > BROKERAGE_RATE_INTRADAY:
+        processed_entry['Intraday'] = False
+    else:
+        processed_entry['Intraday'] = True
+
+    scrap_keys = COLUMNS[:3]
+
+    if is_new_html_format:
+        scrap_keys += [ 'Buy/Sell', 'Remarks' ]
+
+    processed_entry = { key:value for key,value in processed_entry.items() if not any(k in key for k in scrap_keys) and (key == 'Intraday' or value) }
+
+    return processed_entry
+
 """ Process transactions from Contract Notes
 """
 def process_cn_entries(entries):
@@ -160,68 +216,23 @@ def process_cn_entries(entries):
             is_data = True
 
         if is_data:
-            # New scrip
+            # Scrip entries start
             if not is_scrip:
                 is_scrip = True
 
-                item = {}
-
-                if is_new_html_format:
-                    item.update(dict(zip(COLUMNS_NEW, entry)))
-                else:
-                    item.update(dict(zip(COLUMNS, entry)))
-
-                if is_new_html_format:
-                    item['Type'] = "SELL" if item['Buy/Sell'] == 'S' else "BUY"
-                else:
-                    if 'Sold Qty' in item and item['Sold Qty']:
-                        item['Type'] = "SELL"
-                        item['Quantity'] = item.pop("Sold Qty")
-                    elif 'Bought Qty' in item and item['Bought Qty']:
-                        item['Type'] = "BUY"
-                        item['Quantity'] = item.pop("Bought Qty")
-
-                # Total is always positive value
-                if(float(item['Total']) < 0):
-                    item['Total'] = str(abs(float(item['Total'])))
-
-                scrap_keys = COLUMNS[:3]
-
-                if is_new_html_format:
-                    scrap_keys += [ 'Buy/Sell', 'Remarks' ]
-
-                item = { key:value for key,value in item.items() if not any(k in key for k in scrap_keys) and value }
+                item =  process_cn_entry(entry, is_new_html_format)
             else:
-                # Multiple entries
+                # More entries for same scrip
                 if entry[0] and entry[0].isdigit():
-                    next_item = dict(zip(COLUMNS_NEW, entry))
+                    next_item =  process_cn_entry(entry, is_new_html_format)
 
-                    if is_new_html_format:
-                        next_item['Type'] = "SELL" if next_item['Buy/Sell'] == 'S' else "BUY"
-                    else:
-                        if 'Sold Qty' in next_item:
-                            next_item['Type'] = "SELL"
-                            next_item['Quantity'] = next_item.pop("Sold Qty")
-
-                        if 'Bought Qty' in next_item:
-                            next_item['Type'] = "BUY"
-                            next_item['Quantity'] = next_item.pop("Bought Qty")
-
-                    # Total is always positive value
-                    if(float(next_item['Total']) < 0):
-                        next_item['Total'] = str(abs(float(next_item['Total'])))
-
-                    scrap_keys = COLUMNS[:3]
-
-                    if is_new_html_format:
-                        scrap_keys += [ 'Buy/Sell', 'Remarks' ]
-
-                    next_item = { key:value for key,value in next_item.items() if not any(k in key for k in scrap_keys) and value }
-
+                    # Move the first entry as first entry in Trades
                     if "Trades" not in item:
                         item = {"Trades": [ item ]}
 
                     item["Trades"].append(next_item)
+
+                    # Let's continue on to next entry
                     continue
 
                 col = 11 if is_new_html_format else 12
@@ -229,7 +240,7 @@ def process_cn_entries(entries):
                 if entry[col]:
                     item[entry[4].strip("*").strip()] = entry[col]
 
-                # Finished all entries for this scrip, cleanup
+                # Misc entries for the scrip
                 if "TOTAL STT" in entry[4] or not entry[col]:
                     is_scrip = False
                     is_data = False
@@ -351,80 +362,96 @@ def crunch_trades(transactions):
                 "Rate": 0,
                 "Cleared": 0,
                 "Cleared Percentage": 0,
+                "Intraday Cleared": 0,
+                "Intraday Cleared Percentage": 0,
                 "Total Buy Value": 0,
                 "Total Sell Value": 0,
                 "Short Quantity": 0,
                 "Short Value": 0,
                 "Short Rate": 0,
+                "Intraday Buy Value": 0,
+                "Intraday Sell Value": 0,
                 "Total Trade Volume": 0,
                 "Total Brokerage": 0
             }
 
         # BUY
         if transaction['Type'] == 'BUY':
-            if trades[scrip]['Short Quantity'] == 0:
-                trades[scrip]['Total Quantity'] += quantity
-                trades[scrip]['Total Value'] += total
-                trades[scrip]['Rate'] = trades[scrip]['Total Value'] / trades[scrip]['Total Quantity']
+            # If intraday, just add to total intraday values
+            if 'Intraday' in transaction and transaction['Intraday']:
+                trades[scrip]['Intraday Buy Value'] += total
             else:
-                # Cover short
-                if trades[scrip]['Short Quantity'] >= quantity:
-                    # Not enough to cover all
-                    trades[scrip]['Total Buy Value'] += total
-                    trades[scrip]['Total Sell Value'] += (quantity * trades[scrip]['Short Rate'])
-
-                    trades[scrip]['Short Quantity'] -= quantity
-                    trades[scrip]['Short Value'] = trades[scrip]['Short Quantity'] * trades[scrip]['Short Rate']
-                else:
-                    # Cover short first
-                    cover_quantity = trades[scrip]['Short Quantity']
-
-                    trades[scrip]['Total Buy Value'] += (cover_quantity * total / quantity)
-                    trades[scrip]['Total Sell Value'] += (cover_quantity * trades[scrip]['Short Rate'])
-
-                    trades[scrip]['Short Quantity'] = 0
-                    trades[scrip]['Short Value'] = 0
-
-                    # Add rest to stock
-                    buy_quantity = quantity - cover_quantity
-                    trades[scrip]['Total Quantity'] += buy_quantity
-                    trades[scrip]['Total Value'] += (buy_quantity * total / quantity)
+                if trades[scrip]['Short Quantity'] == 0:
+                    trades[scrip]['Total Quantity'] += quantity
+                    trades[scrip]['Total Value'] += total
                     trades[scrip]['Rate'] = trades[scrip]['Total Value'] / trades[scrip]['Total Quantity']
+                else:
+                    # Cover short
+                    if trades[scrip]['Short Quantity'] >= quantity:
+                        # Not enough to cover all
+                        trades[scrip]['Total Buy Value'] += total
+                        trades[scrip]['Total Sell Value'] += (quantity * trades[scrip]['Short Rate'])
+
+                        trades[scrip]['Short Quantity'] -= quantity
+                        trades[scrip]['Short Value'] = trades[scrip]['Short Quantity'] * trades[scrip]['Short Rate']
+                    else:
+                        # Cover short first
+                        cover_quantity = trades[scrip]['Short Quantity']
+
+                        trades[scrip]['Total Buy Value'] += (cover_quantity * total / quantity)
+                        trades[scrip]['Total Sell Value'] += (cover_quantity * trades[scrip]['Short Rate'])
+
+                        trades[scrip]['Short Quantity'] = 0
+                        trades[scrip]['Short Value'] = 0
+
+                        # Add rest to stock
+                        buy_quantity = quantity - cover_quantity
+                        trades[scrip]['Total Quantity'] += buy_quantity
+                        trades[scrip]['Total Value'] += (buy_quantity * total / quantity)
+                        trades[scrip]['Rate'] = trades[scrip]['Total Value'] / trades[scrip]['Total Quantity']
         else:
-            # Have shares?
-            if trades[scrip]['Total Quantity'] >= quantity:
-                # Calculate cleared value
-                trades[scrip]['Total Buy Value'] += quantity * trades[scrip]['Rate']
-                trades[scrip]['Total Sell Value'] += total
-
-                # The difference is covered by Cleared. Rate remains the same.
-                trades[scrip]['Total Quantity'] -= quantity
-                trades[scrip]['Total Value'] = trades[scrip]['Total Quantity'] * trades[scrip]['Rate']
-            elif trades[scrip]['Total Quantity'] == 0:
-                trades[scrip]['Short Quantity'] += quantity
-                trades[scrip]['Short Value'] += total
-                trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
+            # If intraday, just add to total intraday values
+            if 'Intraday' in transaction and transaction['Intraday']:
+                trades[scrip]['Intraday Sell Value'] += total
             else:
-                # Partial short
-                cleared_quantity = trades[scrip]['Total Quantity']
-                #trades[scrip]['Cleared'] += (cleared_quantity * total / quantity) - trades[scrip]['Total Value']
+                # Have shares?
+                if trades[scrip]['Total Quantity'] >= quantity:
+                    # Calculate cleared value
+                    trades[scrip]['Total Buy Value'] += quantity * trades[scrip]['Rate']
+                    trades[scrip]['Total Sell Value'] += total
 
-                trades[scrip]['Total Buy Value'] += trades[scrip]['Total Value']
-                trades[scrip]['Total Sell Value'] += (cleared_quantity * total / quantity)
+                    # The difference is the profit/loss. Rate remains the same.
+                    trades[scrip]['Total Quantity'] -= quantity
+                    trades[scrip]['Total Value'] = trades[scrip]['Total Quantity'] * trades[scrip]['Rate']
+                elif trades[scrip]['Total Quantity'] == 0:
+                    trades[scrip]['Short Quantity'] += quantity
+                    trades[scrip]['Short Value'] += total
+                    trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
+                else:
+                    # Partial short
+                    cleared_quantity = trades[scrip]['Total Quantity']
 
-                trades[scrip]['Total Quantity'] = 0
-                trades[scrip]['Total Value'] = 0
+                    trades[scrip]['Total Buy Value'] += trades[scrip]['Total Value']
+                    trades[scrip]['Total Sell Value'] += (cleared_quantity * total / quantity)
 
-                trades[scrip]['Short Quantity'] += quantity - cleared_quantity
-                trades[scrip]['Short Value'] += total - (cleared_quantity * total / quantity)
-                trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
+                    trades[scrip]['Total Quantity'] = 0
+                    trades[scrip]['Total Value'] = 0
+
+                    trades[scrip]['Short Quantity'] += quantity - cleared_quantity
+                    trades[scrip]['Short Value'] += total - (cleared_quantity * total / quantity)
+                    trades[scrip]['Short Rate'] = trades[scrip]['Short Value'] / trades[scrip]['Short Quantity']
 
         trades[scrip]['Total Trade Volume'] += total
 
         trades[scrip]['Total Brokerage'] += float(transaction["Brokerage"]) * quantity
 
         # Prune
-        if trades[scrip]['Total Quantity'] == 0 and trades[scrip]['Short Quantity'] == 0 and trades[scrip]['Total Buy Value'] == 0:
+        if (trades[scrip]['Total Quantity'] == 0 and
+                trades[scrip]['Short Quantity'] == 0 and
+                trades[scrip]['Intraday Buy Value'] == 0 and
+                trades[scrip]['Intraday Sell Value'] == 0 and
+                trades[scrip]['Total Buy Value'] == 0):
+            raise Exception('Boo')
             del(trades[scrip])
 
         # Clean
@@ -436,13 +463,17 @@ def crunch_trades(transactions):
 
     # How much did we clear?
     for k, v in trades.items():
-        if k == MISC_KEY or v['Total Buy Value'] == 0:
+        if k == MISC_KEY:
             continue
 
-        v['Cleared'], v['Cleared Percentage'] = calculate_profit(v['Total Buy Value'], v['Total Sell Value'])
+        if v['Total Buy Value'] <> 0:
+            v['Cleared'], v['Cleared Percentage'] = calculate_profit(v['Total Buy Value'], v['Total Sell Value'])
+
+        if v['Intraday Buy Value'] <> 0:
+            v['Intraday Cleared'], v['Intraday Cleared Percentage'] = calculate_profit(v['Intraday Buy Value'], v['Intraday Sell Value'])
 
     # Prune again
-    trades = {k: v for k,v in trades.iteritems() if k == MISC_KEY or trades[k]['Total Quantity'] > 0 or trades[k]['Cleared'] <> 0}
+    trades = {k: v for k,v in trades.iteritems() if k == MISC_KEY or trades[k]['Total Quantity'] > 0 or trades[k]['Cleared'] <> 0 or trades[k]['Intraday Cleared'] <> 0}
 
     return trades
 
@@ -461,6 +492,8 @@ def update_portfolio(trades, portfolio):
                 "Average Rate": trades[scrip]["Rate"],
                 "Cleared": trades[scrip]["Cleared"],
                 "Cleared Percentage": trades[scrip]["Cleared Percentage"],
+                "Intraday": trades[scrip]["Intraday Cleared"],
+                "Intraday Percentage": trades[scrip]["Intraday Cleared Percentage"],
                 "Total Trade Volume": trades[scrip]["Total Trade Volume"],
                 "Total Brokerage": trades[scrip]["Total Brokerage"]
                 }
@@ -505,13 +538,14 @@ def generate_report(transactions):
         print " | E. EXIT LOAD [+ TAX] (APPROX): " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
         print " | F. PROFIT/LOSS [- EXIT LOAD] : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
         print " | G. CLEARED [- CHARGES]       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
-        print " | H. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), "red" if report['previous_balance'] < 0 else "green") + " |"
-        print " | I. DIVIDEND                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['dividend'])), 'green') + " |"
-        print " | J. BALANCE (G + H + I)       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
-        print " | K. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
-        print " | L. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
-        print " | M. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
-        print " | N. SO WHAT IS THE VERDICT??  : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['verdict'], report['verdict_percentage'])), "red" if report['verdict'] < 0 else "green") + " |"
+        print " | H. INTRADAY                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['intraday_cleared'])), "red" if report['intraday_cleared'] < 0 else "green") + " |"
+        print " | I. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), "red" if report['previous_balance'] < 0 else "green") + " |"
+        print " | J. DIVIDEND                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['dividend'])), 'green') + " |"
+        print " | K. BALANCE (G + H + I + J)   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
+        print " | L. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
+        print " | M. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
+        print " | N. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
+        print " | O. SO WHAT IS THE VERDICT??  : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['verdict'], report['verdict_percentage'])), "red" if report['verdict'] < 0 else "green") + " |"
         print "=" * 64
 
         print
@@ -530,6 +564,7 @@ def process_portfolio(portfolio):
     total = 0
     current_value = 0
     cleared = 0
+    intraday_cleared = 0
     charges = 0
     total_trade_volume = 0
     total_brokerage = 0
@@ -561,6 +596,7 @@ def process_portfolio(portfolio):
             total += portfolio[key]["Total Value"]
             current_value += portfolio[key]["Current Value"]
             cleared += portfolio[key]["Cleared"]
+            intraday_cleared += portfolio[key]["Intraday"]
             total_trade_volume += portfolio[key]["Total Trade Volume"]
             total_brokerage += portfolio[key]["Total Brokerage"]
 
@@ -569,6 +605,9 @@ def process_portfolio(portfolio):
 
             # Add Cleared Percentage
             portfolio[key]["Cleared"] = (portfolio[key]["Cleared"], portfolio[key]["Cleared Percentage"])
+
+            # Add Intraday Percentage
+            portfolio[key]["Intraday"] = (portfolio[key]["Intraday"], portfolio[key]["Intraday Percentage"])
 
     # Look at Ledger
     ledger_totals = get_ledger_totals()
@@ -584,12 +623,12 @@ def process_portfolio(portfolio):
     charges -= charges_credit
 
     cleared -= charges
-    capital_gain_tax = cleared * CAPITAL_GAIN_TAX_RATE
+    capital_gain_tax = (cleared + intraday_cleared) * CAPITAL_GAIN_TAX_RATE
     exit_load = (current_value * EXIT_LOAD_RATE) + capital_gain_tax
     profit -= exit_load
     previous_balance = PREVIOUS_BALANCE
     dividend = get_total_dividend()
-    balance = previous_balance + cleared + dividend
+    balance = previous_balance + cleared + intraday_cleared + dividend
     profit_percentage = profit / total * 100
     verdict = balance + profit
     verdict_percentage = verdict / total_transferred * 100
@@ -603,6 +642,7 @@ def process_portfolio(portfolio):
                 "profit_percentage": profit_percentage,
                 "capital_gain_tax": capital_gain_tax,
                 "cleared": cleared,
+                "intraday_cleared": intraday_cleared,
                 "previous_balance": previous_balance,
                 "dividend": dividend,
                 "balance": balance,
@@ -628,23 +668,14 @@ def tabular(data):
     print
     print
 
-head = [
-        'Scrip',
-        'Total Quantity',
-        'Total Value',
-        'Average Rate',
-        'Market Rate',
-        'Current Value',
-        'Profit/Loss',
-        'Cleared'
-        ]
-
 """ Convert dictionary to two-dimentional list
 """
 def convert_to_table(data):
     data_table = []
 
-    data_table.append(head)
+    titles = [x[0] for x in HEADINGS]
+
+    data_table.append(titles)
 
     for key, value in sorted(data.iteritems()):
         if key == MISC_KEY:
@@ -652,7 +683,7 @@ def convert_to_table(data):
 
         row = []
         row.append(key)
-        for k in head:
+        for k in titles:
             if k in value:
                 if k == "Market Rate":
                     if value[k] == 0:
@@ -669,8 +700,9 @@ def convert_to_table(data):
 """ Print the two dimentional list as a table
 """
 def print_table(data_table):
-    for entry in data_table[0]:
-        print "+ {0:-^20}".format(""),
+    print data_table
+    for i, entry in enumerate(data_table[0]):
+        print "+ {0:-^{width}}".format("", width=HEADINGS[i][1]),
 
     print "+"
 
@@ -678,6 +710,8 @@ def print_table(data_table):
 
     for line in data_table:
         for i, entry in enumerate(line):
+
+            column_title, column_width, column_align = HEADINGS[i]
 
             if is_first:
                 print "| {0:^20}".format(entry),
@@ -687,7 +721,7 @@ def print_table(data_table):
                 elif entry == "_INVALID_":
                     print "| " + colored("{0:^20}".format("_INVALID_"), 'red'),
                 else:
-                    if head[i] == "Profit/Loss" or head[i] == "Cleared":
+                    if column_title == "Profit/Loss" or column_title == "Cleared" or column_title == "Intraday":
                         if entry[0] < 0:
                             color = 'red'
                         else:
@@ -695,11 +729,11 @@ def print_table(data_table):
                     else:
                         color = 'white'
 
-                    if head[i] == "Scrip":
+                    if column_title == "Scrip":
                         print "| " + colored("{0:20}".format(entry), color),
-                    elif head[i] == "Market Rate":
+                    elif column_title == "Market Rate":
                         print "| " + colored("{0:>20}".format(entry), color),
-                    elif head[i] == "Profit/Loss" or head[i] == "Cleared":
+                    elif column_title == "Profit/Loss" or column_title == "Cleared" or column_title == "Intraday":
                         print "| " + colored("{0:>20}".format("{:,.2f} ({:.2f}%)".format(entry[0], entry[1])), color),
                     else:
                         print "| " + colored("{0:>20}".format('{0:.2f}'.format(entry)), color),
