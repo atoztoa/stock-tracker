@@ -503,7 +503,7 @@ def update_portfolio(trades, portfolio):
 
 """ Print a line in report
 """
-def create_report_entry(source, title, value_key, color='blue', title_width=30, value_width=30, old_source=None):
+def get_report_entry(source, title, value_key, color='blue', title_width=30, value_width=30, change_width=20, old_source=None):
     entry = ""
     entry += " | {:{width}}: ".format(title, width=title_width)
     value_format = "₹ {:,.2f}"
@@ -512,10 +512,10 @@ def create_report_entry(source, title, value_key, color='blue', title_width=30, 
         value_key = [value_key]
 
     value = [source[x] for x in value_key]
-    
+
     if len(value_key) > 1:
         value_format += " ( {:.2f}% )"
-    
+
     value_entry = value_format.format(*value)
 
     # Lossy operation
@@ -527,16 +527,18 @@ def create_report_entry(source, title, value_key, color='blue', title_width=30, 
     value_entry = "{:{width}}".format(value_entry, width=value_width)
     color_entry = colored(value_entry, color)
     entry += color_entry
-    entry += " |"
 
+    # Changes
     if old_source:
-        old_value = old_source[value_key[0]]
-        change = value - old_value
+        change = value - old_source[value_key[0]]
 
-        change_format = "{:+,.2f}"
-        change_color = "red" if change < 0 else "green"
-        
-        entry += " -- " + colored(change_format.format(change), change_color)
+        if change <> 0:
+            change_format = "{:+,.2f}"
+            change_color = "red" if change < 0 else "green"
+
+            change_entry = change_format.format(change)
+
+            entry += " | {}".format(colored(change_entry, change_color))
 
     return entry
 
@@ -564,19 +566,19 @@ def generate_report(transactions):
     final_report = [
             [ "A. TOTAL INVESTMENT", 'total', 'white' ],
             [ "B. CURRENT VALUE", 'current_value', 'yellow' ],
-            [ "C. CHARGES (ACTUAL", 'charges', 'cyan' ],
+            [ "C. CHARGES (ACTUAL)", 'charges', 'cyan' ],
             [ "C1. ANNUAL CHARGES", 'charges_annual', 'cyan' ],
             [ "C2. LATE PAYMENT CHARGES", 'charges_late', 'cyan' ],
             [ "C3. CHARGES REFUND", 'charges_credit', 'cyan' ],
             [ "C4. SERVICE TAX", 'charges_st', 'cyan' ],
-            [ "D. CAPITAL GAIN TAX (APPROX", 'capital_gain_tax', 'cyan' ],
-            [ "E. EXIT LOAD [+ TAX] (APPROX", 'exit_load', 'cyan' ],
+            [ "D. CAPITAL GAIN TAX (APPROX)", 'capital_gain_tax', 'cyan' ],
+            [ "E. EXIT LOAD [+ TAX] (APPROX)", 'exit_load', 'cyan' ],
             [ "F. PROFIT/LOSS [- EXIT LOAD]", ('profit', 'profit_percentage'), ("red", "green") ],
             [ "G. CLEARED [- CHARGES]", 'cleared', ("red", "green") ],
             [ "H. INTRADAY", 'intraday_cleared', ("red", "green") ],
-            [ "I. PREVIOUS BALANCE (ACTUAL", 'previous_balance', ("red", "green") ],
+            [ "I. PREVIOUS BALANCE (ACTUAL)", 'previous_balance', ("red", "green") ],
             [ "J. DIVIDEND", 'dividend', 'green' ],
-            [ "K. BALANCE (G + H + I + J", 'balance', ("red", "green") ],
+            [ "K. BALANCE (G + H + I + J)", 'balance', ("red", "green") ],
             [ "L. TOTAL TRADE VOLUME", 'total_trade_volume', 'blue' ],
             [ "M. TOTAL BROKERAGE", 'total_brokerage', 'blue' ],
             [ "N. TOTAL FUNDS TRANSFERRED", 'total_funds_transferred', 'white' ],
@@ -598,12 +600,12 @@ def generate_report(transactions):
 
         print_tabular(portfolio)
 
-        print "=" * 64
+        print "=" * 80
 
         for report_item in final_report:
-            print create_report_entry(report, *report_item, title_width=30, value_width=28, old_source=last_report)
+            print get_report_entry(report, *report_item, title_width=30, value_width=28, old_source=last_report)
 
-        print "=" * 64
+        print "=" * 80
 
         print
         print "+" * 80
