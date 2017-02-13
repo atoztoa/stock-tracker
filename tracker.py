@@ -500,16 +500,88 @@ def update_portfolio(trades, portfolio):
 
     portfolio[MISC_KEY] = {"Total Value": trades[MISC_KEY]["Total Value"]}
 
+
+""" Print a line in report
+"""
+def create_report_entry(source, title, value_key, color='blue', title_width=30, value_width=30, old_source=None):
+    entry = ""
+    entry += " | {:{width}}: ".format(title, width=title_width)
+    value_format = "₹ {:,.2f}"
+
+    if not isinstance(value_key, tuple):
+        value_key = [value_key]
+
+    value = [source[x] for x in value_key]
+    
+    if len(value_key) > 1:
+        value_format += " ( {:.2f}% )"
+    
+    value_entry = value_format.format(*value)
+
+    # Lossy operation
+    value = value[0]
+
+    if isinstance(color, tuple):
+        color = color[0] if value < 0 else color[1]
+
+    value_entry = "{:{width}}".format(value_entry, width=value_width)
+    color_entry = colored(value_entry, color)
+    entry += color_entry
+    entry += " |"
+
+    if old_source:
+        old_value = old_source[value_key[0]]
+        change = value - old_value
+
+        change_format = "{:+,.2f}"
+        change_color = "red" if change < 0 else "green"
+        
+        entry += " -- " + colored(change_format.format(change), change_color)
+
+    return entry
+
 """ Create and update the portfolio
 """
 def generate_report(transactions):
     print "Generating portfolio..."
+
+    # Load last report
+    try:
+        with open('last_report.json') as f:
+            last_report = json.load(f)
+    except Exception as e:
+        last_report = None
 
     portfolio = {}
 
     update_portfolio(trades, portfolio)
 
     report = process_portfolio(portfolio)
+
+    # Store
+    json.dump(report, open('last_report.json', 'w'), indent=2);
+
+    final_report = [
+            [ "A. TOTAL INVESTMENT", 'total', 'white' ],
+            [ "B. CURRENT VALUE", 'current_value', 'yellow' ],
+            [ "C. CHARGES (ACTUAL", 'charges', 'cyan' ],
+            [ "C1. ANNUAL CHARGES", 'charges_annual', 'cyan' ],
+            [ "C2. LATE PAYMENT CHARGES", 'charges_late', 'cyan' ],
+            [ "C3. CHARGES REFUND", 'charges_credit', 'cyan' ],
+            [ "C4. SERVICE TAX", 'charges_st', 'cyan' ],
+            [ "D. CAPITAL GAIN TAX (APPROX", 'capital_gain_tax', 'cyan' ],
+            [ "E. EXIT LOAD [+ TAX] (APPROX", 'exit_load', 'cyan' ],
+            [ "F. PROFIT/LOSS [- EXIT LOAD]", ('profit', 'profit_percentage'), ("red", "green") ],
+            [ "G. CLEARED [- CHARGES]", 'cleared', ("red", "green") ],
+            [ "H. INTRADAY", 'intraday_cleared', ("red", "green") ],
+            [ "I. PREVIOUS BALANCE (ACTUAL", 'previous_balance', ("red", "green") ],
+            [ "J. DIVIDEND", 'dividend', 'green' ],
+            [ "K. BALANCE (G + H + I + J", 'balance', ("red", "green") ],
+            [ "L. TOTAL TRADE VOLUME", 'total_trade_volume', 'blue' ],
+            [ "M. TOTAL BROKERAGE", 'total_brokerage', 'blue' ],
+            [ "N. TOTAL FUNDS TRANSFERRED", 'total_funds_transferred', 'white' ],
+            [ "O. SO WHAT IS THE VERDICT??", ('verdict', 'verdict_percentage'), ("red", "green") ]
+        ]
 
     # ------------ Display results --------------
     # ------------ Save results to file --------------
@@ -524,28 +596,13 @@ def generate_report(transactions):
         print "-" * 30 + " " + colored(datetime.datetime.strftime(datetime.datetime.now(), "%Y-%m-%d %H:%M:%S"), 'cyan') + " " + "-" * 29
         print "+" * 80
 
-        tabular(portfolio)
+        print_tabular(portfolio)
 
         print "=" * 64
-        print " | A. TOTAL INVESTMENT          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total'])), 'white') + " |"
-        print " | B. CURRENT VALUE             : " + colored("{0:29}".format("₹ {:,.2f}".format(report['current_value'])), 'yellow') + " |"
-        print " | C. CHARGES (ACTUAL)          : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges'])), 'cyan') + " |"
-        print " | C1. ANNUAL CHARGES           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_annual'])), 'cyan') + " |"
-        print " | C2. LATE PAYMENT CHARGES     : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_late'])), 'cyan') + " |"
-        print " | C3. CHARGES REFUND           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_credit'])), 'cyan') + " |"
-        print " | C4. SERVICE TAX              : " + colored("{0:29}".format("₹ {:,.2f}".format(report['charges_st'])), 'cyan') + " |"
-        print " | D. CAPITAL GAIN TAX (APPROX) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['capital_gain_tax'])), 'cyan') + " |"
-        print " | E. EXIT LOAD [+ TAX] (APPROX): " + colored("{0:29}".format("₹ {:,.2f}".format(report['exit_load'])), 'cyan') + " |"
-        print " | F. PROFIT/LOSS [- EXIT LOAD] : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['profit'], report['profit_percentage'])), "red" if report['profit'] < 0 else "green") + " |"
-        print " | G. CLEARED [- CHARGES]       : " + colored("{0:29}".format("₹ {:,.2f}".format(report['cleared'])), "red" if report['cleared'] < 0 else "green") + " |"
-        print " | H. INTRADAY                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['intraday_cleared'])), "red" if report['intraday_cleared'] < 0 else "green") + " |"
-        print " | I. PREVIOUS BALANCE (ACTUAL) : " + colored("{0:29}".format("₹ {:,.2f}".format(report['previous_balance'])), "red" if report['previous_balance'] < 0 else "green") + " |"
-        print " | J. DIVIDEND                  : " + colored("{0:29}".format("₹ {:,.2f}".format(report['dividend'])), 'green') + " |"
-        print " | K. BALANCE (G + H + I + J)   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['balance'])), "red" if report['balance'] < 0 else "green") + " |"
-        print " | L. TOTAL TRADE VOLUME        : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_trade_volume'])), 'blue') + " |"
-        print " | M. TOTAL BROKERAGE           : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_brokerage'])), 'blue') + " |"
-        print " | N. TOTAL FUNDS TRANSFERRED   : " + colored("{0:29}".format("₹ {:,.2f}".format(report['total_funds_transferred'])), 'white') + " |"
-        print " | O. SO WHAT IS THE VERDICT??  : " + colored("{0:29}".format("₹ {:,.2f} ( {:.2f}% )".format(report['verdict'], report['verdict_percentage'])), "red" if report['verdict'] < 0 else "green") + " |"
+
+        for report_item in final_report:
+            print create_report_entry(report, *report_item, title_width=30, value_width=28, old_source=last_report)
+
         print "=" * 64
 
         print
@@ -659,7 +716,7 @@ def process_portfolio(portfolio):
 
 """ Display the portfolio in tabular form
 """
-def tabular(data):
+def print_tabular(data):
     data_table = convert_to_table(data)
 
     print
