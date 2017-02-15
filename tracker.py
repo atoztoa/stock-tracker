@@ -17,17 +17,18 @@ COLUMNS = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Bou
 COLUMNS_NEW = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Buy/Sell', 'Quantity', 'Gross Rate', 'Brokerage', 'Net Rate', 'Closing Rate', 'Total', 'Remarks', 'Trade Date']
 LEDGER_COLUMNS = ['Date', 'Voucher', 'Bank Code', 'Cheque', 'Description', 'Debit', 'Credit', 'Balance']
 
-# Title, Width, Alignment
-HEADINGS = [
-        ('Scrip', 20, '^'),
-        ('Total Quantity', 20, '^'),
-        ('Total Value', 20, '^'),
-        ('Average Rate', 20, '^'),
-        ('Market Rate', 20, '^'),
-        ('Current Value', 20, '^'),
-        ('Profit/Loss', 20, '^'),
-        ('Cleared', 20, '^'),
-        ('Intraday', 20, '^')
+# Title, Width, Alignment, Key
+REPORT_FORMAT = [
+        ('Scrip', 20, '^', 'Scrip', False, False, 'white'),
+        ('Quantity', 12, '>', 'Total Quantity', True, False, 'white'),
+        ('Buy Value', 14, '>', 'Total Value', True, True, 'white'),
+        ('Rate', 12, '>', 'Average Rate', True, True, 'white'),
+        ('New Rate', 12, '>', 'Market Rate', True, True, 'white'),
+        ('Rate Change', 20, '>', 'Market Change', True, True, ('red', 'green')),
+        ('New Value', 14, '>', 'Current Value', True, True, 'white'),
+        ('Profit/Loss', 22, '>', 'Profit/Loss', True, True, ('red', 'green')),
+        ('Cleared', 22, '>', 'Cleared', True, True, ('red', 'green')),
+        ('Intraday', 22, '>', 'Intraday', True, True, ('red', 'green'))
         ]
 
 
@@ -72,8 +73,8 @@ class Scrip:
     def get_price(self, scrip):
         scrip = self.scrip[scrip]
 
-        price = str(scrip['price'])
-        price_change = [scrip['change'], scrip['change_percentage']]
+        price = float(scrip['price'])
+        price_change = [float(scrip['change']), float(scrip['change_percentage'])]
 
         return (price, price_change)
 
@@ -501,14 +502,14 @@ def update_portfolio(trades, portfolio):
     portfolio[MISC_KEY] = {"Total Value": trades[MISC_KEY]["Total Value"]}
 
 
-""" Print a line in report
+""" Format a line in report
 """
-def get_report_entry(source, title, value_key, color='blue', title_width=30, value_width=30, change_width=20, old_source=None):
+def format_report_entry(source, title, value_key, color='blue', title_width=30, value_width=30, change_width=20, old_source=None):
     entry = ""
     entry += " | {:{width}}: ".format(title, width=title_width)
     value_format = "₹ {:,.2f}"
 
-    if not isinstance(value_key, tuple):
+    if not isinstance(value_key, (list, tuple)):
         value_key = [value_key]
 
     value = [source[x] for x in value_key]
@@ -521,7 +522,7 @@ def get_report_entry(source, title, value_key, color='blue', title_width=30, val
     # Lossy operation
     value = value[0]
 
-    if isinstance(color, tuple):
+    if isinstance(color, (list, tuple)):
         color = color[0] if value < 0 else color[1]
 
     value_entry = "{:{width}}".format(value_entry, width=value_width)
@@ -603,7 +604,7 @@ def generate_report(transactions):
         print "=" * 80
 
         for report_item in final_report:
-            print get_report_entry(report, *report_item, title_width=30, value_width=28, old_source=last_report)
+            print format_report_entry(report, *report_item, title_width=30, value_width=28, old_source=last_report)
 
         print "=" * 80
 
@@ -732,9 +733,9 @@ def print_tabular(data):
 def convert_to_table(data):
     data_table = []
 
-    titles = [x[0] for x in HEADINGS]
+    keys = [x[3] for x in REPORT_FORMAT]
 
-    data_table.append(titles)
+    data_table.append([x[0] for x in REPORT_FORMAT])
 
     for key, value in sorted(data.iteritems()):
         if key == MISC_KEY:
@@ -742,25 +743,59 @@ def convert_to_table(data):
 
         row = []
         row.append(key)
-        for k in titles:
-            if k in value:
-                if k == "Market Rate":
-                    if value[k] == 0:
-                        row.append("_INVALID_")
-                    else:
-                        row.append('{0:.2f} [ {1:>5} ]'.format(value[k], value["Market Change"][0]))
-                else:
-                    row.append(value[k])
+
+        row.extend([value[k] for k in keys if k in value])
 
         data_table.append(row)
 
     return data_table
 
+""" Format a value in table cell
+"""
+def format_table_entry(value, color, width, alignment, is_number=True, is_currency=False):
+    if not isinstance(value, (list, tuple)):
+        value = [value]
+    
+    if not isinstance(color, (list, tuple)):
+        color = [color]
+
+    if len(color) > 1:
+        color = color[0] if value[0] < 0 else color[1]
+    else:
+        color = color[0]
+
+    value_entry = ''
+
+    # Zero = blank
+    if value[0] == 0:
+        value_entry = "_._"
+        color = 'grey'
+        alignment = '^'
+    else:
+        if is_currency:
+            value_format = "₹ {:,.2f}"
+            # Rupee symbol is considered as 3 characters
+            width += 2
+        else:
+            value_format = "{:,.2f}"
+
+        if is_number:
+            if len(value) > 1:
+                value_format += " ({:.2f}%)"
+
+            value_entry = value_format.format(*value)
+        else:
+            value_entry = value[0]
+
+    entry = "| " + colored("{0:{alignment}{width}}".format(value_entry, alignment=alignment, width=width), color)
+
+    return entry
+
 """ Print the two dimentional list as a table
 """
 def print_table(data_table):
     for i, entry in enumerate(data_table[0]):
-        print "+ {0:-^{width}}".format("", width=HEADINGS[i][1]),
+        print "+ {0:-^{width}}".format("", width=REPORT_FORMAT[i][1]),
 
     print "+"
 
@@ -769,37 +804,21 @@ def print_table(data_table):
     for line in data_table:
         for i, entry in enumerate(line):
 
-            column_title, column_width, column_align = HEADINGS[i]
+            color = REPORT_FORMAT[i][6]
+            width = REPORT_FORMAT[i][1]
+            alignment = REPORT_FORMAT[i][2]
+            is_number = REPORT_FORMAT[i][4]
+            is_currency = REPORT_FORMAT[i][5]
 
             if is_first:
-                print "| {0:^20}".format(entry),
+                print "| {0:^{width}}".format(entry, width=width),
             else:
-                if entry == 0 or (isinstance(entry, tuple) and entry[0] == 0) :
-                    print "| " + colored("{0:^20}".format("_._"), 'grey'),
-                elif entry == "_INVALID_":
-                    print "| " + colored("{0:^20}".format("_INVALID_"), 'red'),
-                else:
-                    if column_title == "Profit/Loss" or column_title == "Cleared" or column_title == "Intraday":
-                        if entry[0] < 0:
-                            color = 'red'
-                        else:
-                            color = 'green'
-                    else:
-                        color = 'white'
-
-                    if column_title == "Scrip":
-                        print "| " + colored("{0:20}".format(entry), color),
-                    elif column_title == "Market Rate":
-                        print "| " + colored("{0:>20}".format(entry), color),
-                    elif column_title == "Profit/Loss" or column_title == "Cleared" or column_title == "Intraday":
-                        print "| " + colored("{0:>20}".format("{:,.2f} ({:.2f}%)".format(entry[0], entry[1])), color),
-                    else:
-                        print "| " + colored("{0:>20}".format('{0:.2f}'.format(entry)), color),
+                print format_table_entry(entry, color, width, alignment, is_number, is_currency),
 
         print "|"
 
-        for entry in line:
-            print "+ {0:-^20}".format(""),
+        for i, entry in enumerate(line):
+            print "+ {0:-^{width}}".format("", width=REPORT_FORMAT[i][1]),
 
         print "+"
 
