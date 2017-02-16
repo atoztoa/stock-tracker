@@ -32,6 +32,28 @@ REPORT_FORMAT = [
         ('Dividend', 10, '>', 'Dividend', True, True, 'white')
         ]
 
+'''
+Current Value
+Cleared Percentage
+Market Change
+Average Rate
+Total Brokerage
+Total Trade Volume
+Total Quantity
+Intraday Percentage
+Total Value
+Profit/Loss Percentage
+Dividend
+Cleared
+Profit/Loss
+Intraday
+Market Rate
+'''
+REPORT_ORDER = {
+        "sort_key": "Profit/Loss",
+        "reverse": True,
+        "blank_at_end": True
+        }
 
 BROKERAGE_RATE_INTRADAY = 0.00035
 BROKERAGE_RATE_DELIVERY = 0.0035
@@ -744,7 +766,27 @@ def convert_to_table(data):
 
     data_table.append([x[0] for x in REPORT_FORMAT])
 
-    for key, value in sorted(data.iteritems()):
+    # Sort the portfolio table
+    def sorter(item):
+        if item[0] == MISC_KEY:
+            return -1
+
+        item = item[1]
+
+        sort_key = item[REPORT_ORDER['sort_key']]
+
+        if isinstance(sort_key, (list, tuple)):
+            sort_key = sort_key[0]
+
+        if sort_key == 0:
+            sort_key = 9999999999 if REPORT_ORDER['blank_at_end'] else -9999999999
+
+            if REPORT_ORDER['reverse']:
+                sort_key = -sort_key
+
+        return sort_key
+
+    for key, value in sorted(data.iteritems(), key=sorter, reverse=REPORT_ORDER['reverse']):
         if key == MISC_KEY:
             continue
 
