@@ -17,18 +17,19 @@ COLUMNS = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Bou
 COLUMNS_NEW = ['Order No', 'Order Time', 'Trade No.', 'Trade Time', 'Security', 'Buy/Sell', 'Quantity', 'Gross Rate', 'Brokerage', 'Net Rate', 'Closing Rate', 'Total', 'Remarks', 'Trade Date']
 LEDGER_COLUMNS = ['Date', 'Voucher', 'Bank Code', 'Cheque', 'Description', 'Debit', 'Credit', 'Balance']
 
-# Title, Width, Alignment, Key
+# Title, Width, Alignment, Key, IsNumber, IsCurrency, Color
 REPORT_FORMAT = [
-        ('Scrip', 20, '^', 'Scrip', False, False, 'white'),
+        ('Security', 20, '<', '', False, False, 'white'),
         ('Quantity', 12, '>', 'Total Quantity', True, False, 'white'),
         ('Buy Value', 14, '>', 'Total Value', True, True, 'white'),
         ('Rate', 12, '>', 'Average Rate', True, True, 'white'),
         ('New Rate', 12, '>', 'Market Rate', True, True, 'white'),
-        ('Rate Change', 20, '>', 'Market Change', True, True, ('red', 'green')),
+        ('Rate Change', 17, '>', 'Market Change', True, True, ('red', 'green')),
         ('New Value', 14, '>', 'Current Value', True, True, 'white'),
         ('Profit/Loss', 22, '>', 'Profit/Loss', True, True, ('red', 'green')),
         ('Cleared', 22, '>', 'Cleared', True, True, ('red', 'green')),
-        ('Intraday', 22, '>', 'Intraday', True, True, ('red', 'green'))
+        ('Intraday', 22, '>', 'Intraday', True, True, ('red', 'green')),
+        ('Dividend', 10, '>', 'Dividend', True, True, 'white')
         ]
 
 
@@ -51,7 +52,7 @@ class Writer:
 
 """ Class for managing scrips
 """
-class Scrip:
+class ScripManager:
     URL = "http://finance.google.com/finance/info?q="
 
     def __init__(self):
@@ -88,7 +89,7 @@ class Scrip:
     def fetch_price(self):
         scrip_list = ",".join(self.scrip.keys())
 
-        url = Scrip.URL + scrip_list
+        url = ScripManager.URL + scrip_list
 
         response = urllib2.urlopen(url).read()
 
@@ -173,12 +174,15 @@ def process_cn_entry(entry, is_new_html_format=False):
         processed_entry['Intraday'] = False
     else:
         processed_entry['Intraday'] = True
+    
+    processed_entry['Scrip'] = scrip_manager.get_scrip_from_title(processed_entry['Security'])
 
     scrap_keys = COLUMNS[:3]
 
     if is_new_html_format:
         scrap_keys += [ 'Buy/Sell', 'Remarks' ]
 
+    # Scrap
     processed_entry = { key:value for key,value in processed_entry.items() if not any(k in key for k in scrap_keys) and (key == 'Intraday' or value) }
 
     return processed_entry
@@ -317,9 +321,13 @@ def crunch_transactions(entries):
         else:
             if 'STT' in entry:
                 del(entry['STT'])
+
+            if 'Scrip' not in entry:
+                entry['Scrip'] = scrip_manager.get_scrip_from_title(entry['Security'])
+
             crunched_entries.append(entry)
 
-    crunched_entries = sorted(crunched_entries, key=lambda k: (k['Security'], k['Trade Date'], k['Trade Time']))
+    crunched_entries = sorted(crunched_entries, key=lambda k: (k['Scrip'], k['Trade Date'], k['Trade Time']))
 
     crunched_entries.append({"Type": MISC_KEY, "Total": misc_total})
 
@@ -347,13 +355,9 @@ def crunch_trades(transactions):
             }
 
     for transaction in transactions:
-        scrip = transaction['Security']
+        scrip = transaction['Scrip']
         quantity = float(transaction['Quantity'])
         total = float(transaction["Total"])
-
-        # Kludge
-        if scrip == 'ITC  LTD':
-            scrip = 'I T C'
 
         # Blank entry
         if scrip not in trades:
@@ -628,6 +632,7 @@ def process_portfolio(portfolio):
     charges = 0
     total_trade_volume = 0
     total_brokerage = 0
+    total_dividend = 0
 
     # Final
     for key in dict(portfolio):
@@ -636,10 +641,12 @@ def process_portfolio(portfolio):
             charges = portfolio[key]["Total Value"]
             portfolio[key]["Total Value"] = round(portfolio[key]["Total Value"], 2)
         else:
-            market_rate = scrip.get_price(scrip.get_scrip_from_title(key))
+            market_rate = scrip_manager.get_price(key)
 
             portfolio[key]["Market Rate"] = float(market_rate[0])
             portfolio[key]["Market Change"] = market_rate[1]
+
+            portfolio[key]["Dividend"] = get_dividend(key)
 
             if portfolio[key]["Total Value"] > 0:
                 portfolio[key]["Current Value"] = portfolio[key]["Total Quantity"] * portfolio[key]["Market Rate"]
@@ -659,6 +666,7 @@ def process_portfolio(portfolio):
             intraday_cleared += portfolio[key]["Intraday"]
             total_trade_volume += portfolio[key]["Total Trade Volume"]
             total_brokerage += portfolio[key]["Total Brokerage"]
+            total_dividend += portfolio[key]["Dividend"]
 
             # Add Profit/Loss Percentage
             portfolio[key]["Profit/Loss"] = (portfolio[key]["Profit/Loss"], portfolio[key]["Profit/Loss Percentage"])
@@ -687,8 +695,7 @@ def process_portfolio(portfolio):
     exit_load = (current_value * EXIT_LOAD_RATE) + capital_gain_tax
     profit -= exit_load
     previous_balance = PREVIOUS_BALANCE
-    dividend = get_total_dividend()
-    balance = previous_balance + cleared + intraday_cleared + dividend
+    balance = previous_balance + cleared + intraday_cleared + total_dividend
     profit_percentage = profit / total * 100
     verdict = balance + profit
     verdict_percentage = verdict / total_transferred * 100
@@ -704,7 +711,7 @@ def process_portfolio(portfolio):
                 "cleared": cleared,
                 "intraday_cleared": intraday_cleared,
                 "previous_balance": previous_balance,
-                "dividend": dividend,
+                "dividend": total_dividend,
                 "balance": balance,
                 "charges": charges,
                 "charges_annual": charges_annual,
@@ -742,7 +749,7 @@ def convert_to_table(data):
             continue
 
         row = []
-        row.append(key)
+        row.append(scrip_manager.get_title_from_scrip(key))
 
         row.extend([value[k] for k in keys if k in value])
 
@@ -824,24 +831,12 @@ def print_table(data_table):
 
         is_first = False
 
-
-""" Get the total dividend earned
+""" Get dividend earned for scrip
 """
-def get_total_dividend():
-    # Load dividend
-    try:
-        with open('__dividends.json') as f:
-            dividends = json.load(f)
-    except Exception as e:
-        print e
+def get_dividend(key):
+    entries = [x for x in dividends if x['Scrip'] == key]
 
-    total = 0
-
-    for entry in dividends:
-        total += float(entry["Total"])
-
-    return total
-
+    return sum(float(item["Total"]) for item in entries)
 
 """ Get the total amounts from Ledger
 """
@@ -943,7 +938,7 @@ def process_ledger_entries(entries):
 """
 if __name__ == '__main__':
     # Setup scrips
-    scrip = Scrip()
+    scrip_manager = ScripManager()
 
     transactions = []
     processed_files = []
@@ -968,6 +963,11 @@ if __name__ == '__main__':
     try:
         with open('__dividends.json') as f:
             dividends = json.load(f)
+
+        for entry in dividends:
+            if 'Scrip' not in entry:
+                print entry['Security']
+                entry['Scrip'] = scrip_manager.get_scrip_from_title(entry['Security'])
     except Exception as e:
         print e
 
@@ -993,6 +993,12 @@ if __name__ == '__main__':
             print "Processing file: " + filename + "..."
             dividend = json.load(open(filename))
             dividends.extend(dividend)
+
+            for entry in dividends:
+                if 'Scrip' not in entry:
+                    print entry['Security']
+                    entry['Scrip'] = scrip_manager.get_scrip_from_title(entry['Security'])
+            
             processed_files.append(filename)
 
 
