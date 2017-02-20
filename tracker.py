@@ -62,6 +62,10 @@ CAPITAL_GAIN_TAX_RATE = 0.15
 
 PREVIOUS_BALANCE = -20000.00
 
+# ------- GLOBALS --------- #
+dividends = []
+ipo_investment = 0
+
 """ Custom class for printing to file
 """
 class Writer:
@@ -224,9 +228,7 @@ def process_cn_entries(entries):
     entries = [entry for entry in entries if "".join(entry).strip()]
 
     # New format?
-    head = entries[0]
-
-    if len(head) == 14:
+    if len(entries[0]) == 14:
         is_new_html_format = True
 
     for entry in entries:
@@ -267,7 +269,7 @@ def process_cn_entries(entries):
                 if entry[col]:
                     item[entry[4].strip("*").strip()] = entry[col]
 
-                # Misc entries for the scrip
+                # Entries for the scrip are done
                 if "TOTAL STT" in entry[4] or not entry[col]:
                     is_scrip = False
                     is_data = False
@@ -333,6 +335,8 @@ def crunch_cn_entries(entries):
 """ Crunch transactions
 """
 def crunch_transactions(entries):
+    global ipo_investment
+
     crunched_entries = []
 
     misc_total = 0
@@ -348,6 +352,10 @@ def crunch_transactions(entries):
                 entry['Scrip'] = scrip_manager.get_scrip_from_title(entry['Security'])
 
             crunched_entries.append(entry)
+
+        # IPOs
+        if "Notes" in entry and entry["Notes"] == "IPO":
+            ipo_investment += float(entry["Total"])
 
     crunched_entries = sorted(crunched_entries, key=lambda k: (k['Scrip'], k['Trade Date'], k['Trade Time']))
 
@@ -556,7 +564,7 @@ def format_report_entry(source, title, value_key, color='blue', title_width=30, 
     entry += color_entry
 
     # Changes
-    if old_source:
+    if old_source and value_key[0] in old_source:
         change = value - old_source[value_key[0]]
 
         if change <> 0:
@@ -608,8 +616,9 @@ def generate_report(transactions):
             [ "K. BALANCE (G + H + I + J)", 'balance', ("red", "green") ],
             [ "L. TOTAL TRADE VOLUME", 'total_trade_volume', 'blue' ],
             [ "M. TOTAL BROKERAGE", 'total_brokerage', 'blue' ],
-            [ "N. TOTAL FUNDS TRANSFERRED", 'total_funds_transferred', 'white' ],
-            [ "O. SO WHAT IS THE VERDICT??", ('verdict', 'verdict_percentage'), ("red", "green") ]
+            [ "N. TOTAL IPO", 'ipo_investment', 'white' ],
+            [ "O. TOTAL FUNDS TRANSFERRED", 'total_funds_transferred', 'white' ],
+            [ "P. SO WHAT IS THE VERDICT??", ('verdict', 'verdict_percentage'), ("red", "green") ]
         ]
 
     # ------------ Display results --------------
@@ -702,7 +711,7 @@ def process_portfolio(portfolio):
     # Look at Ledger
     ledger_totals = get_ledger_totals()
 
-    total_transferred = ledger_totals["funds_transferred"]
+    total_transferred = ledger_totals["funds_transferred"] + ipo_investment
     charges_annual = ledger_totals["charges_annual"]
     charges_late = ledger_totals["charges_late"]
     charges_credit = ledger_totals["charges_credit"]
@@ -726,6 +735,7 @@ def process_portfolio(portfolio):
                 "total": total,
                 "current_value": current_value,
                 "total_funds_transferred": total_transferred,
+                "ipo_investment": ipo_investment,
                 "exit_load": exit_load,
                 "profit": profit,
                 "profit_percentage": profit_percentage,
@@ -876,6 +886,8 @@ def print_table(data_table):
 """ Get dividend earned for scrip
 """
 def get_dividend(key):
+    global dividends
+
     entries = [x for x in dividends if x['Scrip'] == key]
 
     return sum(float(item["Total"]) for item in entries)
@@ -984,7 +996,6 @@ if __name__ == '__main__':
 
     transactions = []
     processed_files = []
-    dividends = []
     misc_trades = []
 
     # Load existing transactions
