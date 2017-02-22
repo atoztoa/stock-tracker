@@ -55,8 +55,9 @@ REPORT_ORDER = {
         "blank_at_end": True
         }
 
-BROKERAGE_RATE_INTRADAY = 0.00035
-BROKERAGE_RATE_DELIVERY = 0.0035
+# 0.3% - 0.4% (0.2% minimum limit for accomodating rounding)
+BROKERAGE_RATE_DELIVERY = 0.002
+
 EXIT_LOAD_RATE = 0.004
 CAPITAL_GAIN_TAX_RATE = 0.15
 
@@ -196,10 +197,10 @@ def process_cn_entry(entry, is_new_html_format=False):
     # Is this intraday?
     brokerage_rate = float(processed_entry['Brokerage']) / float(processed_entry['Gross Rate'])
 
-    if brokerage_rate > BROKERAGE_RATE_INTRADAY:
-        processed_entry['Intraday'] = False
-    else:
+    if brokerage_rate < BROKERAGE_RATE_DELIVERY:
         processed_entry['Intraday'] = True
+    else:
+        processed_entry['Intraday'] = False
     
     processed_entry['Scrip'] = scrip_manager.get_scrip_from_title(processed_entry['Security'])
 
@@ -1049,7 +1050,6 @@ if __name__ == '__main__':
 
             for entry in dividends:
                 if 'Scrip' not in entry:
-                    print entry['Security']
                     entry['Scrip'] = scrip_manager.get_scrip_from_title(entry['Security'])
             
             processed_files.append(filename)
