@@ -24,7 +24,7 @@ REPORT_FORMAT = [
         ('Buy Value', 14, '>', 'Total Value', True, True, 'white'),
         ('Rate', 12, '>', 'Average Rate', True, True, 'white'),
         ('New Rate', 12, '>', 'Market Rate', True, True, 'white'),
-        ('Rate Change', 17, '>', 'Market Change', True, True, ('red', 'green')),
+        ('Rate Change', 18, '>', 'Market Change', True, True, ('red', 'green')),
         ('New Value', 14, '>', 'Current Value', True, True, 'white'),
         ('Profit/Loss', 22, '>', 'Profit/Loss', True, True, ('red', 'green')),
         ('Cleared', 22, '>', 'Cleared', True, True, ('red', 'green')),
@@ -50,8 +50,8 @@ Intraday
 Market Rate
 '''
 REPORT_ORDER = {
-        "sort_key": "Profit/Loss",
-        "reverse": True,
+        "sort_key": "",
+        "reverse": False,
         "blank_at_end": True
         }
 
@@ -781,6 +781,10 @@ def convert_to_table(data):
     def sorter(item):
         if item[0] == MISC_KEY:
             return -1
+
+        # No specified sort -> sort by Scrip name
+        if not REPORT_ORDER['sort_key']:
+            return scrip_manager.get_title_from_scrip(item[0])
 
         item = item[1]
 
