@@ -129,6 +129,10 @@ class ScripManager:
         for item in response:
             scrip = item['e'] + ':' + item['t']
 
+            # FIXME : Kludge
+            if scrip == "BOM:532285":
+                scrip = "NSE:GEOJITBNPP"
+
             self.scrip[scrip]['price'] = item['l'].replace(',', '')
             self.scrip[scrip]['change'] = item['c'].replace(',', '')
             self.scrip[scrip]['change_percentage'] = item['cp'].replace(',', '')
@@ -607,14 +611,14 @@ def generate_report(transactions):
             [ "C2. LATE PAYMENT CHARGES", 'charges_late', 'cyan' ],
             [ "C3. CHARGES REFUND", 'charges_credit', 'cyan' ],
             [ "C4. SERVICE TAX", 'charges_st', 'cyan' ],
-            [ "D. CAPITAL GAIN TAX (APPROX)", 'capital_gain_tax', 'cyan' ],
-            [ "E. EXIT LOAD [+ TAX] (APPROX)", 'exit_load', 'cyan' ],
-            [ "F. PROFIT/LOSS [- EXIT LOAD]", ('profit', 'profit_percentage'), ("red", "green") ],
-            [ "G. CLEARED [- CHARGES]", 'cleared', ("red", "green") ],
-            [ "H. INTRADAY", 'intraday_cleared', ("red", "green") ],
-            [ "I. PREVIOUS BALANCE (ACTUAL)", 'previous_balance', ("red", "green") ],
-            [ "J. DIVIDEND", 'dividend', 'green' ],
-            [ "K. BALANCE (G + H + I + J)", 'balance', ("red", "green") ],
+            [ "D. EXIT LOAD (APPROX)", 'exit_load', 'cyan' ],
+            [ "E. PROFIT/LOSS [- EXIT LOAD]", ('profit', 'profit_percentage'), ("red", "green") ],
+            [ "F. CLEARED [- CHARGES]", 'cleared', ("red", "green") ],
+            [ "G. INTRADAY", 'intraday_cleared', ("red", "green") ],
+            [ "H. PREVIOUS BALANCE (ACTUAL)", 'previous_balance', ("red", "green") ],
+            [ "I. DIVIDEND", 'dividend', 'green' ],
+            [ "J. CAPITAL GAIN TAX (APPROX)", 'capital_gain_tax', 'cyan' ],
+            [ "K. BALANCE (F + G + H + I - J)", 'balance', ("red", "green") ],
             [ "L. TOTAL TRADE VOLUME", 'total_trade_volume', 'blue' ],
             [ "M. TOTAL BROKERAGE", 'total_brokerage', 'blue' ],
             [ "N. TOTAL IPO", 'ipo_investment', 'white' ],
@@ -724,10 +728,10 @@ def process_portfolio(portfolio):
 
     cleared -= charges
     capital_gain_tax = (cleared + intraday_cleared) * CAPITAL_GAIN_TAX_RATE
-    exit_load = (current_value * EXIT_LOAD_RATE) + capital_gain_tax
+    exit_load = (current_value * EXIT_LOAD_RATE)
     profit -= exit_load
     previous_balance = PREVIOUS_BALANCE
-    balance = previous_balance + cleared + intraday_cleared + total_dividend
+    balance = previous_balance + cleared + intraday_cleared + total_dividend - capital_gain_tax
     profit_percentage = profit / total * 100
     verdict = balance + profit
     verdict_percentage = verdict / total_transferred * 100
@@ -913,7 +917,7 @@ def get_ledger_totals():
 
     return {
             "charges_annual": ledger_totals["Maintenance Charges"],
-            "funds_transferred": -(ledger_totals["Transfer"]),
+            "funds_transferred": -(ledger_totals["Transfer"]) - ledger_totals["Withdrawal"],
             "charges_credit": -(ledger_totals["Charges Reversed"]),
             "charges_late": ledger_totals["Late Charges"],
             "charges_st": ledger_totals["Service Tax"]
@@ -948,6 +952,7 @@ def process_ledger_entries(entries):
         "To Bill": "Buy",
         "OPENING BALANCE": "Opening Balance",
         "Direct Credit": "Transfer",
+        "Bank Payment": "Withdrawal",
         "By Bill": "Sell",
         "Amc": "Maintenance Charges",
         "Delayed": "Late Charges",
@@ -961,6 +966,7 @@ def process_ledger_entries(entries):
         "Buy": 0,
         "Opening Balance": 0,
         "Transfer": 0,
+        "Withdrawal": 0,
         "Sell": 0,
         "Maintenance Charges": 0,
         "Late Charges": 0,
