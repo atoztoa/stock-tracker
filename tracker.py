@@ -6,7 +6,6 @@ import urllib2
 import re
 import datetime
 from bs4 import BeautifulSoup
-import codecs
 from termcolor import colored
 import sys
 
@@ -20,13 +19,13 @@ LEDGER_COLUMNS = ['Date', 'Voucher', 'Bank Code', 'Cheque', 'Description', 'Debi
 # Title, Width, Alignment, Key, IsNumber, IsCurrency, Color
 REPORT_FORMAT = [
         ('Security', 20, '<', '', False, False, 'white'),
-        ('Quantity', 12, '>', 'Total Quantity', True, False, 'white'),
+        ('Quantity', 11, '>', 'Total Quantity', True, False, 'white'),
         ('Buy Value', 14, '>', 'Total Value', True, True, 'white'),
         ('Rate', 12, '>', 'Average Rate', True, True, 'white'),
         ('New Rate', 12, '>', 'Market Rate', True, True, 'white'),
         ('Rate Change', 18, '>', 'Market Change', True, True, ('red', 'green')),
         ('New Value', 14, '>', 'Current Value', True, True, 'white'),
-        ('Profit/Loss', 22, '>', 'Profit/Loss', True, True, ('red', 'green')),
+        ('Profit/Loss', 23, '>', 'Profit/Loss', True, True, ('red', 'green')),
         ('Cleared', 22, '>', 'Cleared', True, True, ('red', 'green')),
         ('Intraday', 22, '>', 'Intraday', True, True, ('red', 'green')),
         ('Dividend', 10, '>', 'Dividend', True, True, 'white')
@@ -67,19 +66,21 @@ PREVIOUS_BALANCE = -20000.00
 dividends = []
 ipo_investment = 0
 
-""" Custom class for printing to file
-"""
+
 class Writer:
-    def __init__(self, *writers) :
+    """ Custom class for printing to file
+    """
+    def __init__(self, *writers):
         self.writers = writers
 
-    def write(self, text) :
-        for w in self.writers :
+    def write(self, text):
+        for w in self.writers:
             w.write(text)
 
-""" Class for managing scrips
-"""
+
 class ScripManager:
+    """ Class for managing scrips
+    """
     URL = "http://finance.google.com/finance/info?q="
 
     def __init__(self):
@@ -102,7 +103,10 @@ class ScripManager:
         scrip = self.scrip[scrip]
 
         price = float(scrip['price'])
-        price_change = [float(scrip['change']), float(scrip['change_percentage'])]
+        price_change = [
+            float(scrip['change']),
+            float(scrip['change_percentage'])
+        ]
 
         return (price, price_change)
 
@@ -111,7 +115,7 @@ class ScripManager:
         self.title = json.load(open("scrip.json"))
 
         for k, v in self.title.items():
-            self.scrip[v] = { 'title': k }
+            self.scrip[v] = {'title': k}
 
     def fetch_price(self):
         scrip_list = ",".join(self.scrip.keys())
@@ -134,18 +138,23 @@ class ScripManager:
                 scrip = "NSE:GEOJITBNPP"
 
             self.scrip[scrip]['price'] = item['l'].replace(',', '')
-            self.scrip[scrip]['change'] = item['c'].replace(',', '')
-            self.scrip[scrip]['change_percentage'] = item['cp'].replace(',', '')
+            self.scrip[scrip]['change'] = (item['c'].replace(',', '')
+                                           if item['c']
+                                           else "0")
+            self.scrip[scrip]['change_percentage'] = (item['cp'].replace(',', '')
+                                                      if item['cp']
+                                                      else "0")
 
-""" Get transaction data from Contract Note file
-"""
+
 def parse_cn_file(filename):
+    """ Get transaction data from Contract Note file
+    """
     print "Processing file: " + filename + "..."
     html = open(filename).read()
 
     soup = BeautifulSoup(html, 'lxml')
 
-    trade_date = soup.find('td', text = re.compile('TRADE DATE(.*)', re.DOTALL)).parent.findAll('td')[1].text
+    trade_date = soup.find('td', text=re.compile('TRADE DATE(.*)', re.DOTALL)).parent.findAll('td')[1].text
 
     table = soup.find("td", class_="xl27boTBL").findParents("table")[0]
 
@@ -174,9 +183,10 @@ def parse_cn_file(filename):
 
     return entries
 
-""" Process a single entry from CN
-"""
+
 def process_cn_entry(entry, is_new_html_format=False):
+    """ Process a single entry from CN
+    """
     processed_entry = {}
 
     if is_new_html_format:
@@ -205,22 +215,23 @@ def process_cn_entry(entry, is_new_html_format=False):
         processed_entry['Intraday'] = True
     else:
         processed_entry['Intraday'] = False
-    
+
     processed_entry['Scrip'] = scrip_manager.get_scrip_from_title(processed_entry['Security'])
 
     scrap_keys = COLUMNS[:3]
 
     if is_new_html_format:
-        scrap_keys += [ 'Buy/Sell', 'Remarks' ]
+        scrap_keys += ['Buy/Sell', 'Remarks']
 
     # Scrap
-    processed_entry = { key:value for key,value in processed_entry.items() if not any(k in key for k in scrap_keys) and (key == 'Intraday' or value) }
+    processed_entry = {key:value for key,value in processed_entry.items() if not any(k in key for k in scrap_keys) and (key == 'Intraday' or value)}
 
     return processed_entry
 
-""" Process transactions from Contract Notes
-"""
+
 def process_cn_entries(entries):
+    """ Process transactions from Contract Notes
+    """
     is_data = False
     is_scrip = False
     is_misc = False
@@ -237,7 +248,7 @@ def process_cn_entries(entries):
         is_new_html_format = True
 
     for entry in entries:
-        scrap_entries = [ 'ISIN', 'BUY AVERAGE', 'SELL AVERAGE', 'NET AVERAGE', 'Delivery Total' ]
+        scrap_entries = ['ISIN', 'BUY AVERAGE', 'SELL AVERAGE', 'NET AVERAGE', 'Delivery Total']
 
         # Scrap unnecessary entries
         if any(item in "".join(entry) for item in scrap_entries):
@@ -254,15 +265,15 @@ def process_cn_entries(entries):
             if not is_scrip:
                 is_scrip = True
 
-                item =  process_cn_entry(entry, is_new_html_format)
+                item = process_cn_entry(entry, is_new_html_format)
             else:
                 # More entries for same scrip
                 if entry[0] and entry[0].isdigit():
-                    next_item =  process_cn_entry(entry, is_new_html_format)
+                    next_item = process_cn_entry(entry, is_new_html_format)
 
                     # Move the first entry as first entry in Trades
                     if "Trades" not in item:
-                        item = {"Trades": [ item ]}
+                        item = {"Trades": [item]}
 
                     item["Trades"].append(next_item)
 
@@ -281,12 +292,12 @@ def process_cn_entries(entries):
 
                     # Cleanup
                     scrap_keys = COLUMNS[:3]
-                    scrap_keys += [ 'STT SELL DELIVERY', 'STT BUY DELIVERY' ]
+                    scrap_keys += ['STT SELL DELIVERY', 'STT BUY DELIVERY']
 
                     if is_new_html_format:
-                        scrap_keys += [ 'Buy/Sell', 'Remarks' ]
+                        scrap_keys += ['Buy/Sell', 'Remarks']
 
-                    item = { key:value for key,value in item.items() if not any(k in key for k in scrap_keys) and value }
+                    item = {key: value for key, value in item.items() if not any(k in key for k in scrap_keys) and value}
 
                     if "TOTAL STT" in item:
                         item['STT'] = item.pop("TOTAL STT")
@@ -309,19 +320,20 @@ def process_cn_entries(entries):
         if "NET AMOUNT DUE" in "".join(entry):
             is_misc = False
 
-    scrap_keys = [ 'NET AMOUNT DUE TO', 'DR. TOTAL', 'CR. TOTAL' ]
+    scrap_keys = ['NET AMOUNT DUE TO', 'DR. TOTAL', 'CR. TOTAL']
 
     # Misc Charges
-    misc = {key:value for key,value in misc.items() if not any(k in key for k in scrap_keys)}
-    misc['Total'] = sum(float(item) for key,item in misc.items())
+    misc = {key: value for key, value in misc.items() if not any(k in key for k in scrap_keys)}
+    misc['Total'] = sum(float(item) for key, item in misc.items())
     misc['Type'] = MISC_KEY
     items.append(misc)
 
     return items
 
-""" Crunch entries
-"""
+
 def crunch_cn_entries(entries):
+    """ Crunch entries
+    """
     crunched_entries = []
 
     for entry in entries:
@@ -330,16 +342,17 @@ def crunch_cn_entries(entries):
             crunched_entries.extend(entry["Trades"])
         else:
             if entry["Type"] == "MISC":
-                misc_entry = { key:value for key,value in entry.items() if key in ["Type", "Total"] }
+                misc_entry = {key: value for key, value in entry.items() if key in ["Type", "Total"]}
                 crunched_entries.append(misc_entry)
             else:
                 crunched_entries.append(entry)
 
     return crunched_entries
 
-""" Crunch transactions
-"""
+
 def crunch_transactions(entries):
+    """ Crunch transactions
+    """
     global ipo_investment
 
     crunched_entries = []
@@ -368,17 +381,19 @@ def crunch_transactions(entries):
 
     return crunched_entries
 
-""" Calculate profit for a trade
-"""
+
 def calculate_profit(buy_value, sell_value):
+    """ Calculate profit for a trade
+    """
     profit = sell_value - buy_value
     profit_percentage = profit / buy_value * 100
 
     return (profit, profit_percentage)
 
-""" Crunch trades
-"""
+
 def crunch_trades(transactions):
+    """ Crunch trades
+    """
     trades = {}
 
     # Retreive and clean MISC
@@ -506,20 +521,21 @@ def crunch_trades(transactions):
         if k == MISC_KEY:
             continue
 
-        if v['Total Buy Value'] <> 0:
+        if v['Total Buy Value'] != 0:
             v['Cleared'], v['Cleared Percentage'] = calculate_profit(v['Total Buy Value'], v['Total Sell Value'])
 
-        if v['Intraday Buy Value'] <> 0:
+        if v['Intraday Buy Value'] != 0:
             v['Intraday Cleared'], v['Intraday Cleared Percentage'] = calculate_profit(v['Intraday Buy Value'], v['Intraday Sell Value'])
 
     # Prune again
-    trades = {k: v for k,v in trades.iteritems() if k == MISC_KEY or trades[k]['Total Quantity'] > 0 or trades[k]['Cleared'] <> 0 or trades[k]['Intraday Cleared'] <> 0}
+    trades = {k: v for k, v in trades.iteritems() if k == MISC_KEY or trades[k]['Total Quantity'] > 0 or trades[k]['Cleared'] != 0 or trades[k]['Intraday Cleared'] != 0}
 
     return trades
 
-""" Update portfolio with trades
-"""
+
 def update_portfolio(trades, portfolio):
+    """ Update portfolio with trades
+    """
     print "Updating portfolio..."
 
     for scrip in trades:
@@ -541,9 +557,9 @@ def update_portfolio(trades, portfolio):
     portfolio[MISC_KEY] = {"Total Value": trades[MISC_KEY]["Total Value"]}
 
 
-""" Format a line in report
-"""
 def format_report_entry(source, title, value_key, color='blue', title_width=30, value_width=30, change_width=20, old_source=None):
+    """ Format a line in report
+    """
     entry = ""
     entry += " | {:{width}}: ".format(title, width=title_width)
     value_format = "₹ {:,.2f}"
@@ -572,7 +588,7 @@ def format_report_entry(source, title, value_key, color='blue', title_width=30, 
     if old_source and value_key[0] in old_source:
         change = value - old_source[value_key[0]]
 
-        if change <> 0:
+        if change != 0:
             change_format = "{:+,.2f}"
             change_color = "red" if change < 0 else "green"
 
@@ -582,16 +598,17 @@ def format_report_entry(source, title, value_key, color='blue', title_width=30, 
 
     return entry
 
-""" Create and update the portfolio
-"""
+
 def generate_report(transactions):
+    """ Create and update the portfolio
+    """
     print "Generating portfolio..."
 
     # Load last report
     try:
         with open('last_report.json') as f:
             last_report = json.load(f)
-    except Exception as e:
+    except Exception:
         last_report = None
 
     portfolio = {}
@@ -601,29 +618,29 @@ def generate_report(transactions):
     report = process_portfolio(portfolio)
 
     # Store
-    json.dump(report, open('last_report.json', 'w'), indent=2);
+    json.dump(report, open('last_report.json', 'w'), indent=2, sort_keys=True)
 
     final_report = [
-            [ "A. TOTAL INVESTMENT", 'total', 'white' ],
-            [ "B. CURRENT VALUE", 'current_value', 'yellow' ],
-            [ "C. CHARGES (ACTUAL)", 'charges', 'cyan' ],
-            [ "C1. ANNUAL CHARGES", 'charges_annual', 'cyan' ],
-            [ "C2. LATE PAYMENT CHARGES", 'charges_late', 'cyan' ],
-            [ "C3. CHARGES REFUND", 'charges_credit', 'cyan' ],
-            [ "C4. SERVICE TAX", 'charges_st', 'cyan' ],
-            [ "D. EXIT LOAD (APPROX)", 'exit_load', 'cyan' ],
-            [ "E. PROFIT/LOSS [- EXIT LOAD]", ('profit', 'profit_percentage'), ("red", "green") ],
-            [ "F. CLEARED [- CHARGES]", 'cleared', ("red", "green") ],
-            [ "G. INTRADAY", 'intraday_cleared', ("red", "green") ],
-            [ "H. PREVIOUS BALANCE (ACTUAL)", 'previous_balance', ("red", "green") ],
-            [ "I. DIVIDEND", 'dividend', 'green' ],
-            [ "J. CAPITAL GAIN TAX (APPROX)", 'capital_gain_tax', 'cyan' ],
-            [ "K. BALANCE (F + G + H + I - J)", 'balance', ("red", "green") ],
-            [ "L. TOTAL TRADE VOLUME", 'total_trade_volume', 'blue' ],
-            [ "M. TOTAL BROKERAGE", 'total_brokerage', 'blue' ],
-            [ "N. TOTAL IPO", 'ipo_investment', 'white' ],
-            [ "O. TOTAL FUNDS TRANSFERRED", 'total_funds_transferred', 'white' ],
-            [ "P. SO WHAT IS THE VERDICT??", ('verdict', 'verdict_percentage'), ("red", "green") ]
+            ["A. TOTAL INVESTMENT", 'total', 'white'],
+            ["B. CURRENT VALUE", 'current_value', 'yellow'],
+            ["C. CHARGES (ACTUAL)", 'charges', 'cyan'],
+            ["C1. ANNUAL CHARGES", 'charges_annual', 'cyan'],
+            ["C2. LATE PAYMENT CHARGES", 'charges_late', 'cyan'],
+            ["C3. CHARGES REFUND", 'charges_credit', 'cyan'],
+            ["C4. SERVICE TAX", 'charges_st', 'cyan'],
+            ["D. EXIT LOAD (APPROX)", 'exit_load', 'cyan'],
+            ["E. PROFIT/LOSS [- EXIT LOAD]", ('profit', 'profit_percentage'), ("red", "green")],
+            ["F. CLEARED [- CHARGES]", 'cleared', ("red", "green")],
+            ["G. INTRADAY", 'intraday_cleared', ("red", "green")],
+            ["H. PREVIOUS BALANCE (ACTUAL)", 'previous_balance', ("red", "green")],
+            ["I. DIVIDEND", 'dividend', 'green'],
+            ["J. CAPITAL GAIN TAX (APPROX)", 'capital_gain_tax', 'cyan'],
+            ["K. BALANCE (F + G + H + I - J)", 'balance', ("red", "green")],
+            ["L. TOTAL TRADE VOLUME", 'total_trade_volume', 'blue'],
+            ["M. TOTAL BROKERAGE", 'total_brokerage', 'blue'],
+            ["N. TOTAL IPO", 'ipo_investment', 'white'],
+            ["O. TOTAL FUNDS TRANSFERRED", 'total_funds_transferred', 'white'],
+            ["P. SO WHAT IS THE VERDICT??", ('verdict', 'verdict_percentage'), ("red", "green")]
         ]
 
     # ------------ Display results --------------
@@ -655,9 +672,9 @@ def generate_report(transactions):
         sys.stdout = _saved_stdout
 
 
-""" Report from portfolio
-"""
 def process_portfolio(portfolio):
+    """ Report from portfolio
+    """
     print "Processing portfolio..."
 
     profit = 0
@@ -761,9 +778,10 @@ def process_portfolio(portfolio):
                 "verdict_percentage": verdict_percentage
             }
 
-""" Display the portfolio in tabular form
-"""
+
 def print_tabular(data):
+    """ Display the portfolio in tabular form
+    """
     data_table = convert_to_table(data)
 
     print
@@ -772,9 +790,10 @@ def print_tabular(data):
     print
     print
 
-""" Convert dictionary to two-dimentional list
-"""
+
 def convert_to_table(data):
+    """ Convert dictionary to two-dimentional list
+    """
     data_table = []
 
     keys = [x[3] for x in REPORT_FORMAT]
@@ -818,12 +837,13 @@ def convert_to_table(data):
 
     return data_table
 
-""" Format a value in table cell
-"""
+
 def format_table_entry(value, color, width, alignment, is_number=True, is_currency=False):
+    """ Format a value in table cell
+    """
     if not isinstance(value, (list, tuple)):
         value = [value]
-    
+
     if not isinstance(color, (list, tuple)):
         color = [color]
 
@@ -859,9 +879,10 @@ def format_table_entry(value, color, width, alignment, is_number=True, is_curren
 
     return entry
 
-""" Print the two dimentional list as a table
-"""
+
 def print_table(data_table):
+    """ Print the two dimentional list as a table
+    """
     for i, entry in enumerate(data_table[0]):
         print "+ {0:-^{width}}".format("", width=REPORT_FORMAT[i][1]),
 
@@ -892,18 +913,20 @@ def print_table(data_table):
 
         is_first = False
 
-""" Get dividend earned for scrip
-"""
+
 def get_dividend(key):
+    """ Get dividend earned for scrip
+    """
     global dividends
 
     entries = [x for x in dividends if x['Scrip'] == key]
 
     return sum(float(item["Total"]) for item in entries)
 
-""" Get the total amounts from Ledger
-"""
+
 def get_ledger_totals():
+    """ Get the total amounts from Ledger
+    """
     ledgers = []
     ledger_totals = {}
 
@@ -923,9 +946,10 @@ def get_ledger_totals():
             "charges_st": ledger_totals["Service Tax"]
     }
 
-""" Get data from Ledger file
-"""
+
 def parse_ledger_file(filename):
+    """ Get data from Ledger file
+    """
     print "Processing file: " + filename + "..."
     html = open(filename).read()
 
@@ -945,9 +969,10 @@ def parse_ledger_file(filename):
 
     return entries
 
-""" Process transactions from Ledger
-"""
+
 def process_ledger_entries(entries):
+    """ Process transactions from Ledger
+    """
     description_map = {
         "To Bill": "Buy",
         "OPENING BALANCE": "Opening Balance",
@@ -976,7 +1001,7 @@ def process_ledger_entries(entries):
     }
 
     for entry in entries:
-        scrap_entries = [ "Opening Balance" ]
+        scrap_entries = ["Opening Balance"]
 
         # Scrap unnecessary entries
         if any(item in "".join(entry) for item in scrap_entries):
@@ -990,7 +1015,7 @@ def process_ledger_entries(entries):
         scrap_keys = LEDGER_COLUMNS[1:4]
         scrap_keys.append(LEDGER_COLUMNS[-1])
 
-        item = { key:value for key,value in item.items() if not any(k in key for k in scrap_keys)}
+        item = {key:value for key,value in item.items() if not any(k in key for k in scrap_keys)}
 
         item["Description"] = [value for key,value in description_map.items() if key in item["Description"]][0]
 
@@ -999,9 +1024,10 @@ def process_ledger_entries(entries):
 
     return totals
 
-""" Main
-"""
+
 if __name__ == '__main__':
+    """ Main
+    """
     # Setup scrips
     scrip_manager = ScripManager()
 
@@ -1009,31 +1035,33 @@ if __name__ == '__main__':
     processed_files = []
     misc_trades = []
 
+    file_list = [
+        "__trades.json",
+        "__processed.json",
+        "__dividends.json",
+    ]
+    file_data = {}
+
+    # Load data from all files
+    for file_name in file_list:
+        try:
+            file_data[file_name] = json.load(open(file_name))
+        except Exception as e:
+            print e
+
     # Load existing transactions
-    try:
-        with open('__trades.json') as f:
-            transactions = json.load(f)
-    except Exception as e:
-        print e
+    transactions = file_data["__trades.json"]
 
     # Load processed file list
-    try:
-        with open('__processed.json') as f:
-            processed_files = json.load(f)
-    except Exception as e:
-        print e
+    processed_files = file_data["__processed.json"]
 
     # Load dividend
-    try:
-        with open('__dividends.json') as f:
-            dividends = json.load(f)
+    dividends = file_data["__dividends.json"]
 
-        for entry in dividends:
-            if 'Scrip' not in entry:
-                print entry['Security']
-                entry['Scrip'] = scrip_manager.get_scrip_from_title(entry['Security'])
-    except Exception as e:
-        print e
+    for entry in dividends:
+        if 'Scrip' not in entry:
+            print entry['Security']
+            entry['Scrip'] = scrip_manager.get_scrip_from_title(entry['Security'])
 
     # Parse 'Contract Note' HTML files
     for filename in glob.glob('CN*.htm*'):
@@ -1061,24 +1089,30 @@ if __name__ == '__main__':
             for entry in dividends:
                 if 'Scrip' not in entry:
                     entry['Scrip'] = scrip_manager.get_scrip_from_title(entry['Security'])
-            
+
             processed_files.append(filename)
-
-
-    # Store
-    json.dump(dividends, open('__dividends.json', 'w'), indent=2);
-
-    # Store
-    json.dump(processed_files, open('__processed.json', 'w'), indent=2);
 
     # Standardize transactions
     transactions = crunch_transactions(transactions)
 
-    # Store
-    json.dump(transactions, open('__trades.json', 'w'), indent=2);
-
+    # CAUTION! transactions will be modified by crunch_trades()
+    # NOTE! Save
+    file_data["__trades.json"] = list(transactions)
     # Start eating them
     trades = crunch_trades(transactions)
+
+    file_data["__dividends.json"] = list(dividends)
+    file_data["__processed.json"] = list(processed_files)
+
+    # Save data to all files
+    for file_name in file_list:
+        try:
+            json.dump(file_data[file_name],
+                      open(file_name, 'w'),
+                      indent=2,
+                      sort_keys=True)
+        except Exception as e:
+            print e
 
     # Generate the porfolio
     generate_report(trades)
