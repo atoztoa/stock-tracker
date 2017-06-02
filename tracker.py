@@ -62,6 +62,9 @@ CAPITAL_GAIN_TAX_RATE = 0.15
 
 PREVIOUS_BALANCE = -20000.00
 
+SELL_RECOMMENDATION_CUTOFF = 4.0
+SELL_RECOMMENDATION_RATE = 105.8/100
+
 # ------- GLOBALS --------- #
 dividends = []
 ipo_investment = 0
@@ -665,6 +668,11 @@ def generate_report(transactions):
 
         print "=" * 80
 
+        if report["recommendation"]:
+            print "RECOMMENDATIONS:"
+            print colored(report["recommendation"][:-1], 'green')
+            print "=" * 80
+
         print
         print "+" * 80
         print
@@ -686,6 +694,7 @@ def process_portfolio(portfolio):
     total_trade_volume = 0
     total_brokerage = 0
     total_dividend = 0
+    recommendation = ""
 
     # Final
     for key in dict(portfolio):
@@ -729,6 +738,11 @@ def process_portfolio(portfolio):
 
             # Add Intraday Percentage
             portfolio[key]["Intraday"] = (portfolio[key]["Intraday"], portfolio[key]["Intraday Percentage"])
+
+            if portfolio[key]["Profit/Loss Percentage"] > SELL_RECOMMENDATION_CUTOFF:
+                sell_price = round(portfolio[key]["Average Rate"] * SELL_RECOMMENDATION_RATE, 2)
+                recommendation += "Sell {scrip} at {price}.\n".format(scrip=scrip_manager.get_title_from_scrip(key),
+                                                                    price=sell_price)
 
     # Look at Ledger
     ledger_totals = get_ledger_totals()
@@ -775,7 +789,8 @@ def process_portfolio(portfolio):
                 "total_trade_volume": total_trade_volume,
                 "total_brokerage": total_brokerage,
                 "verdict": verdict,
-                "verdict_percentage": verdict_percentage
+                "verdict_percentage": verdict_percentage,
+                "recommendation": recommendation
             }
 
 
