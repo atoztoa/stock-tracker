@@ -70,6 +70,43 @@ dividends = []
 ipo_investment = 0
 
 
+def get_market_price(symbol):
+    """ Get current market price
+    """
+    print "Getting market price: " + symbol
+
+    base_url = 'http://finance.google.com/finance?q='
+
+    retries = 2
+
+    while True:
+        try:
+            response = urllib2.urlopen(base_url + symbol)
+            html = response.read()
+        except Exception:
+            if retries > 0:
+                retries -= 1
+            else:
+                raise Exception("Error getting market price!")
+
+        soup = BeautifulSoup(html, 'lxml')
+
+        try:
+            price_change = soup.find("div", { "class": "id-price-change" })
+            price_change = price_change.find("span").find_all("span")
+            price_change = [x.string for x in price_change]
+
+            price = soup.find_all("span", id=re.compile('^ref_.*_l$'))[0].string
+            price = str(unicode(price).encode('ascii', 'ignore')).strip().replace(",", "")
+
+            return (price, price_change)
+        except Exception:
+            if retries > 0:
+                retries -= 1
+            else:
+                raise Exception("Can't get current rate for scrip: " + symbol)
+
+
 class Writer:
     """ Custom class for printing to file
     """
@@ -121,6 +158,7 @@ class ScripManager:
             self.scrip[v] = {'title': k}
 
     def fetch_price(self):
+        ''' Google Finance API broken
         scrip_list = ",".join(self.scrip.keys())
 
         url = ScripManager.URL + scrip_list
@@ -146,6 +184,23 @@ class ScripManager:
                                            else "0")
             self.scrip[scrip]['change_percentage'] = (item['cp'].replace(',', '')
                                                       if item['cp']
+                                                      else "0")
+        '''
+        for scrip in self.scrip:
+            # FIXME : Kludge
+            if scrip == "BOM:532285":
+                scrip = "NSE:GEOJITBNPP"
+
+            price = get_market_price(scrip)
+            self.scrip[scrip]['price'] = str(price[0])
+            self.scrip[scrip]['change'] = (str(price[1][0])
+                                           if price[1][0]
+                                           else "0")
+            self.scrip[scrip]['change_percentage'] = ((str(price[1][1]
+                                                           .strip('(')
+                                                           .strip(')')
+                                                           .strip('%')))
+                                                      if price[1][1]
                                                       else "0")
 
 
