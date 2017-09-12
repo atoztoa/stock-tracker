@@ -999,7 +999,8 @@ def process_ledger_entries(entries):
         "Dividend": "Dividend",
         "Reversed": "Charges Reversed",
         "Refunded": "Charges Reversed",
-        "Service Tax": "Service Tax"
+        "Service Tax": "Service Tax",
+        "Fund Transfer For Offsetting": "Ignore"
     }
 
     totals = {
@@ -1012,7 +1013,8 @@ def process_ledger_entries(entries):
         "Late Charges": 0,
         "Dividend": 0,
         "Charges Reversed": 0,
-        "Service Tax": 0
+        "Service Tax": 0,
+        "Ignore": 0
     }
 
     for entry in entries:
