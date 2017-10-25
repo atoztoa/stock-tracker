@@ -21,8 +21,8 @@ REPORT_FORMAT = [
         ('Security', 20, '<', '', False, False, 'white'),
         ('Quantity', 11, '>', 'Total Quantity', True, False, 'white'),
         ('Buy Value', 14, '>', 'Total Value', True, True, 'white'),
-        ('Rate', 12, '>', 'Average Rate', True, True, 'white'),
-        ('New Rate', 12, '>', 'Market Rate', True, True, 'white'),
+        ('Rate', 11, '>', 'Average Rate', True, True, 'white'),
+        ('New Rate', 11, '>', 'Market Rate', True, True, 'white'),
         ('Rate Change', 18, '>', 'Market Change', True, True, ('red', 'green')),
         ('New Value', 14, '>', 'Current Value', True, True, 'white'),
         ('Profit/Loss', 23, '>', 'Profit/Loss', True, True, ('red', 'green')),
@@ -1120,6 +1120,7 @@ if __name__ == '__main__':
             file_data[file_name] = json.load(open(file_name))
         except Exception as e:
             print e
+            file_data[file_name] = []
 
     # Load existing transactions
     transactions = file_data["__trades.json"]
