@@ -70,43 +70,6 @@ dividends = []
 ipo_investment = 0
 
 
-def get_market_price(symbol):
-    """ Get current market price
-    """
-    print "Getting market price: " + symbol
-
-    base_url = 'http://finance.google.com/finance?q='
-
-    retries = 2
-
-    while True:
-        try:
-            response = urllib2.urlopen(base_url + symbol)
-            html = response.read()
-        except Exception:
-            if retries > 0:
-                retries -= 1
-            else:
-                raise Exception("Error getting market price!")
-
-        soup = BeautifulSoup(html, 'lxml')
-
-        try:
-            price_change = soup.find("div", { "class": "id-price-change" })
-            price_change = price_change.find("span").find_all("span")
-            price_change = [x.string for x in price_change]
-
-            price = soup.find_all("span", id=re.compile('^ref_.*_l$'))[0].string
-            price = str(unicode(price).encode('ascii', 'ignore')).strip().replace(",", "")
-
-            return (price, price_change)
-        except Exception:
-            if retries > 0:
-                retries -= 1
-            else:
-                raise Exception("Can't get current rate for scrip: " + symbol)
-
-
 class Writer:
     """ Custom class for printing to file
     """
@@ -121,7 +84,6 @@ class Writer:
 class ScripManager:
     """ Class for managing scrips
     """
-    URL = "http://finance.google.com/finance/info?q="
 
     def __init__(self):
         self.title = {}
@@ -158,50 +120,57 @@ class ScripManager:
             self.scrip[v] = {'title': k}
 
     def fetch_price(self):
-        ''' Google Finance API broken
-        scrip_list = ",".join(self.scrip.keys())
+        print "Retrieving market price..."
 
-        url = ScripManager.URL + scrip_list
+        scrip_list = self.scrip.keys()
 
-        response = urllib2.urlopen(url).read()
+        # Get id
+        id_list = []
+        id_url = "https://finance.google.com/finance?output=json&q="
 
-        # Remove leading '//'
-        response = response[4:]
+        # Google only allows 14 scrips per call
+        chunks = [scrip_list[x:x+10] for x in range(0, len(scrip_list), 10)]
 
-        response = json.loads(response)
+        for scrips in chunks:
+            url = id_url + ",".join(scrips)
+            response = urllib2.urlopen(url).read()
+            response = json.loads(response)
+            id_list += [x["id"] for x in response["searchresults"]]
 
-        # Let's parse
-        for item in response:
-            scrip = item['e'] + ':' + item['t']
+        # Get data for id
+        columns = ["0", "1", "l", "c", "2", "cp", "3", "4", "e", "5", "t"]
 
-            # FIXME : Kludge
-            if scrip == "BOM:532285":
-                scrip = "NSE:GEOJITBNPP"
+        data_url = ("https://finance.google.com/finance/data?" +
+                    "output=json&catid=30,31&cid=")
 
-            self.scrip[scrip]['price'] = item['l'].replace(',', '')
-            self.scrip[scrip]['change'] = (item['c'].replace(',', '')
-                                           if item['c']
-                                           else "0")
-            self.scrip[scrip]['change_percentage'] = (item['cp'].replace(',', '')
-                                                      if item['cp']
-                                                      else "0")
-        '''
-        for scrip in self.scrip:
-            # FIXME : Kludge
-            if scrip == "BOM:532285":
-                scrip = "NSE:GEOJITBNPP"
+        # Google only allows 14 scrips per call
+        chunks = [id_list[x:x+10] for x in range(0, len(id_list), 10)]
 
-            price = get_market_price(scrip)
-            self.scrip[scrip]['price'] = str(price[0])
-            self.scrip[scrip]['change'] = (str(price[1][0])
-                                           if price[1][0]
-                                           else "0")
-            self.scrip[scrip]['change_percentage'] = ((str(price[1][1]
-                                                           .strip('(')
-                                                           .strip(')')
-                                                           .strip('%')))
-                                                      if price[1][1]
-                                                      else "0")
+        for ids in chunks:
+            url = data_url + ",".join(ids)
+
+            response = urllib2.urlopen(url).read()
+            response = json.loads(response)
+            response = response["company"]["related"]["rows"]
+            response = [dict(zip(columns, x["values"])) for x in response]
+
+            # Let's parse
+            for item in response:
+                scrip = item['e'] + ':' + item['t']
+
+                # FIXME : Kludge
+                if scrip == "BOM:532285":
+                    scrip = "NSE:GEOJITBNPP"
+
+                self.scrip[scrip]['price'] = item['l'].replace(',', '')
+                self.scrip[scrip]['change'] = (item['c'].replace(',', '')
+                                               if item['c']
+                                               else "0")
+                self.scrip[scrip]['change_percentage'] = (
+                    item['cp'].replace(',', '')
+                    if item['cp']
+                    else "0"
+                )
 
 
 def parse_cn_file(filename):
@@ -212,7 +181,11 @@ def parse_cn_file(filename):
 
     soup = BeautifulSoup(html, 'lxml')
 
-    trade_date = soup.find('td', text=re.compile('TRADE DATE(.*)', re.DOTALL)).parent.findAll('td')[1].text
+    trade_date = (soup.find('td',
+                            text=re.compile('TRADE DATE(.*)', re.DOTALL))
+                  .parent
+                  .findAll('td')[1]
+                  .text)
 
     table = soup.find("td", class_="xl27boTBL").findParents("table")[0]
 
@@ -223,10 +196,17 @@ def parse_cn_file(filename):
         entry = []
 
         for cell in row.findAll("td"):
-            entry.append("".join(c for c in str(unicode(cell.string).encode('ascii', 'ignore')).strip() if c not in "*[]~"))
+            entry.append("".join(c
+                                 for c in (str(unicode(cell.string)
+                                               .encode('ascii', 'ignore'))
+                                           .strip())
+                                 if c not in "*[]~"))
 
         # Trade date as last column
-        entry.append(datetime.datetime.strftime(datetime.datetime.strptime(trade_date, '%d/%m/%Y'), '%Y-%m-%d'))
+        entry.append(datetime.datetime.strftime(
+            datetime.datetime.strptime(trade_date, '%d/%m/%Y'),
+            '%Y-%m-%d'
+        ))
 
         # Filter
         if len(entry) > 11 and "".join(entry):
@@ -253,7 +233,9 @@ def process_cn_entry(entry, is_new_html_format=False):
         processed_entry.update(dict(zip(COLUMNS, entry)))
 
     if is_new_html_format:
-        processed_entry['Type'] = "SELL" if processed_entry['Buy/Sell'] == 'S' else "BUY"
+        processed_entry['Type'] = ("SELL"
+                                   if processed_entry['Buy/Sell'] == 'S'
+                                   else "BUY")
     else:
         if 'Sold Qty' in processed_entry and processed_entry['Sold Qty']:
             processed_entry['Type'] = "SELL"
