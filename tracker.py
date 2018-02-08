@@ -149,28 +149,35 @@ class ScripManager:
         for ids in chunks:
             url = data_url + ",".join(ids)
 
-            response = urllib2.urlopen(url).read()
-            response = json.loads(response)
-            response = response["company"]["related"]["rows"]
-            response = [dict(zip(columns, x["values"])) for x in response]
+            while True:
+                try:
+                    response = urllib2.urlopen(url).read()
+                    response = json.loads(response)
+                    response = response["company"]["related"]["rows"]
+                    response = [dict(zip(columns, x["values"])) for x in response]
 
-            # Let's parse
-            for item in response:
-                scrip = item['e'] + ':' + item['t']
+                    # Let's parse
+                    for item in response:
+                        scrip = item['e'] + ':' + item['t']
 
-                # FIXME : Kludge
-                if scrip == "BOM:532285":
-                    scrip = "NSE:GEOJITBNPP"
+                        # FIXME : Kludge
+                        if scrip == "BOM:532285":
+                            scrip = "NSE:GEOJITBNPP"
 
-                self.scrip[scrip]['price'] = item['l'].replace(',', '')
-                self.scrip[scrip]['change'] = (item['c'].replace(',', '')
-                                               if item['c']
-                                               else "0")
-                self.scrip[scrip]['change_percentage'] = (
-                    item['cp'].replace(',', '')
-                    if item['cp']
-                    else "0"
-                )
+                        self.scrip[scrip]['price'] = item['l'].replace(',', '')
+                        self.scrip[scrip]['change'] = (item['c'].replace(',', '')
+                                                       if item['c']
+                                                       else "0")
+                        self.scrip[scrip]['change_percentage'] = (
+                            item['cp'].replace(',', '')
+                            if item['cp']
+                            else "0"
+                        )
+
+                    break
+                except KeyError:
+                    print "..."
+                    pass
 
 
 def parse_cn_file(filename):
@@ -1037,6 +1044,7 @@ def process_ledger_entries(entries):
         "Reversed": "Charges Reversed",
         "Refunded": "Charges Reversed",
         "Service Tax": "Service Tax",
+        "Stt For": "Service Tax",
         "Fund Transfer For Offsetting": "Ignore"
     }
 
